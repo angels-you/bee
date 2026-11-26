@@ -14,11 +14,11 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # ffmpeg, vips with heif (heic, avif) and nats-server for the tests
+      # ffmpeg, vips with heif (heic and avif, read and write) and nats-server for the tests
       - name: tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg libvips-tools libheif-plugin-libde265 libheif-plugin-aomenc
+          sudo apt-get install -y --no-install-recommends ffmpeg libvips-tools libheif-plugin-libde265 libheif-plugin-x265 libheif-plugin-aomdec libheif-plugin-aomenc
           go install github.com/nats-io/nats-server/v2@latest
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 

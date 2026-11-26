@@ -29,11 +29,17 @@ const (
 // Vips runs vips with args and fails the test on an error.
 func Vips(t testing.TB, args ...string) string {
 	t.Helper()
+
+	// stdout is the answer; warnings of vips go to stderr and stay out of it
+	var warnings bytes.Buffer
 	cmd := exec.Command("vips", args...)
-	out, err := cmd.CombinedOutput()
+	cmd.Stderr = &warnings
+
+	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("vips %s: %v\n%s", strings.Join(args, " "), err, out)
+		t.Fatalf("vips %s: %v\n%s%s", strings.Join(args, " "), err, out, warnings.String())
 	}
+
 	return string(out)
 }
 
