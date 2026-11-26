@@ -63,7 +63,6 @@ const (
 	InvalidQuality         = Code("INVALID_QUALITY")          //@retryable=false @redeliver=false desc{a quality is outside 0..100 or missing where it is required}
 	UnsupportedCodec       = Code("UNSUPPORTED_CODEC")        //@retryable=false @redeliver=false desc{the job asks for a codec, pixel format, preset or image format bee does not encode}
 	UnsupportedFormat      = Code("UNSUPPORTED_FORMAT")       //@retryable=false @redeliver=false desc{the container or codec of the source is one bee does not accept}
-	AlreadyExists          = Code("ALREADY_EXISTS")           //@retryable=false @redeliver=false desc{an object is already stored at the output key: a new run needs new keys}
 	InvalidAudio           = Code("INVALID_AUDIO")            //@retryable=false @redeliver=false desc{the audio is empty, corrupted, silent or has no audio stream}
 	InvalidVideo           = Code("INVALID_VIDEO")            //@retryable=false @redeliver=false desc{the video is empty, corrupted, has no video stream or cannot be decoded}
 	InvalidImage           = Code("INVALID_IMAGE")            //@retryable=false @redeliver=false desc{the image is empty, corrupted or cannot be decoded}
@@ -105,8 +104,6 @@ func (a Code) String() string {
 		return "UNSUPPORTED_CODEC"
 	case UnsupportedFormat:
 		return "UNSUPPORTED_FORMAT"
-	case AlreadyExists:
-		return "ALREADY_EXISTS"
 	case InvalidAudio:
 		return "INVALID_AUDIO"
 	case InvalidVideo:
@@ -164,8 +161,6 @@ func (a Code) Title() string {
 		return "UnsupportedCodec"
 	case UnsupportedFormat:
 		return "UnsupportedFormat"
-	case AlreadyExists:
-		return "AlreadyExists"
 	case InvalidAudio:
 		return "InvalidAudio"
 	case InvalidVideo:
@@ -223,8 +218,6 @@ func (a Code) Desc() string {
 		return "the job asks for a codec, pixel format, preset or image format bee does not encode"
 	case UnsupportedFormat:
 		return "the container or codec of the source is one bee does not accept"
-	case AlreadyExists:
-		return "an object is already stored at the output key: a new run needs new keys"
 	case InvalidAudio:
 		return "the audio is empty, corrupted, silent or has no audio stream"
 	case InvalidVideo:
@@ -258,7 +251,7 @@ func (a Code) Desc() string {
 
 func CodeValidIndexType(v Code) bool {
 	switch v {
-	case DownloadTimeout, SourceUrlExpired, SourceUnavailable, StorageTimeout, StorageUnavailable, InternalTemporaryError, InvalidJob, InvalidPath, InvalidDimensions, InvalidQuality, UnsupportedCodec, UnsupportedFormat, AlreadyExists, InvalidAudio, InvalidVideo, InvalidImage, InvalidSound, InvalidWatermark, SourceTooLarge, DimensionLimitExceeded, PixelLimitExceeded, DurationLimitExceeded, NoRendition, OutputTooLarge, EncodeFailed, VerifyFailed:
+	case DownloadTimeout, SourceUrlExpired, SourceUnavailable, StorageTimeout, StorageUnavailable, InternalTemporaryError, InvalidJob, InvalidPath, InvalidDimensions, InvalidQuality, UnsupportedCodec, UnsupportedFormat, InvalidAudio, InvalidVideo, InvalidImage, InvalidSound, InvalidWatermark, SourceTooLarge, DimensionLimitExceeded, PixelLimitExceeded, DurationLimitExceeded, NoRendition, OutputTooLarge, EncodeFailed, VerifyFailed:
 		return true
 	default:
 		return false
@@ -271,7 +264,7 @@ func (a Code) Valid() bool {
 
 func CodeValid(v string) bool {
 	switch Code(v) {
-	case DownloadTimeout, SourceUrlExpired, SourceUnavailable, StorageTimeout, StorageUnavailable, InternalTemporaryError, InvalidJob, InvalidPath, InvalidDimensions, InvalidQuality, UnsupportedCodec, UnsupportedFormat, AlreadyExists, InvalidAudio, InvalidVideo, InvalidImage, InvalidSound, InvalidWatermark, SourceTooLarge, DimensionLimitExceeded, PixelLimitExceeded, DurationLimitExceeded, NoRendition, OutputTooLarge, EncodeFailed, VerifyFailed:
+	case DownloadTimeout, SourceUrlExpired, SourceUnavailable, StorageTimeout, StorageUnavailable, InternalTemporaryError, InvalidJob, InvalidPath, InvalidDimensions, InvalidQuality, UnsupportedCodec, UnsupportedFormat, InvalidAudio, InvalidVideo, InvalidImage, InvalidSound, InvalidWatermark, SourceTooLarge, DimensionLimitExceeded, PixelLimitExceeded, DurationLimitExceeded, NoRendition, OutputTooLarge, EncodeFailed, VerifyFailed:
 		return true
 	default:
 		return false
@@ -279,7 +272,7 @@ func CodeValid(v string) bool {
 }
 
 func CodeIndexes() []Code {
-	return []Code{DownloadTimeout, SourceUrlExpired, SourceUnavailable, StorageTimeout, StorageUnavailable, InternalTemporaryError, InvalidJob, InvalidPath, InvalidDimensions, InvalidQuality, UnsupportedCodec, UnsupportedFormat, AlreadyExists, InvalidAudio, InvalidVideo, InvalidImage, InvalidSound, InvalidWatermark, SourceTooLarge, DimensionLimitExceeded, PixelLimitExceeded, DurationLimitExceeded, NoRendition, OutputTooLarge, EncodeFailed, VerifyFailed}
+	return []Code{DownloadTimeout, SourceUrlExpired, SourceUnavailable, StorageTimeout, StorageUnavailable, InternalTemporaryError, InvalidJob, InvalidPath, InvalidDimensions, InvalidQuality, UnsupportedCodec, UnsupportedFormat, InvalidAudio, InvalidVideo, InvalidImage, InvalidSound, InvalidWatermark, SourceTooLarge, DimensionLimitExceeded, PixelLimitExceeded, DurationLimitExceeded, NoRendition, OutputTooLarge, EncodeFailed, VerifyFailed}
 }
 
 func (a Code) Retryable() bool {

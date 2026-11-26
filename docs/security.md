@@ -121,8 +121,8 @@ encryption.
   segment.
 - The fMP4 init segment (`#EXT-X-MAP`) is not encrypted. The master
   playlist has no key lines.
-- bee never logs the key and never writes it to storage, to the result or to
-  the ledger. Serving the key to players (with your own auth) is your key
+- bee never logs the key and never writes it to storage or to the
+  result. Serving the key to players (with your own auth) is your key
   server's job.
 - With NATS the key is part of the job message, so it sits in the JetStream
   jobs stream until the job is acked. Protect NATS accordingly.

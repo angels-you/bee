@@ -54,14 +54,14 @@ func (a *fixture) init(t *testing.T) {
 	a.ctx = ctx
 }
 
-// engine is an engine over the local storage with ledger.
-func (a *fixture) engine(ledger engine.Ledger) *engine.Engine {
+// engine is an engine over the local storage.
+func (a *fixture) engine() *engine.Engine {
 	st, err := local.New(a.dir)
 	if err != nil {
 		a.t.Fatal(err)
 	}
 
-	e, err := engine.New(a.bench.Config, st, ledger, slog.New(slog.DiscardHandler))
+	e, err := engine.New(a.bench.Config, st, slog.New(slog.DiscardHandler))
 	if err != nil {
 		a.t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func (a *fixture) run(c client) {
 		t.Errorf("failed result id %q", res.ID)
 	}
 
-	// a rerun of a done job: its result again
+	// a rerun of a done job: it runs again over the same keys
 	ar, err = c.Audio(ctx, a.bench.Audio("a1", "e2e/audio"))
 	if err != nil || len(ar.Renditions) != 2 {
 		t.Errorf("rerun: %+v %v", ar, err)
@@ -166,7 +166,7 @@ func TestHTTP(t *testing.T) {
 	f.init(t)
 
 	lis := f.listen()
-	srv := &httpserver.Server{Engine: f.engine(f.bench.Ledger), Token: "test-token", Timeout: time.Minute}
+	srv := &httpserver.Server{Engine: f.engine(), Token: "test-token", Timeout: time.Minute}
 	go srv.Serve(f.ctx, lis, time.Second)
 
 	c := &httpclient.Client{URL: "http://" + lis.Addr().String(), Token: "test-token"}
@@ -186,7 +186,7 @@ func TestGRPC(t *testing.T) {
 	f.init(t)
 
 	lis := f.listen()
-	srv := &grpcserver.Server{Engine: f.engine(f.bench.Ledger), Token: "test-token"}
+	srv := &grpcserver.Server{Engine: f.engine(), Token: "test-token"}
 	go srv.Serve(f.ctx, lis, time.Second)
 
 	c, err := grpcclient.Dial(lis.Addr().String(), false, "test-token")
@@ -215,7 +215,7 @@ func TestNATS(t *testing.T) {
 	f := fixture{}
 	f.init(t)
 
-	// the consumer and its ledger
+	// the consumer
 	cfg := f.bench.Config.NATS
 	cfg.Token = "nats-token"
 	cfg.URL = testbee.NATS(t, cfg.Token)
@@ -229,7 +229,7 @@ func TestNATS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	go cons.Run(f.ctx, f.engine(cons.Ledger()), 2, time.Second)
+	go cons.Run(f.ctx, f.engine(), 2, time.Second)
 
 	c, err := natsclient.Dial(cfg.URL, cfg.Token, cfg.Names())
 	if err != nil {

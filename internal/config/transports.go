@@ -30,7 +30,7 @@ func (a *GRPC) Enabled() bool {
 
 // NATS receives jobs from NATS JetStream; empty URL disables it. Jobs and
 // Done are the subject bases: jobs come on <jobs>.<kind>, results go to
-// <done>.<kind>.<id>; the stream, consumer and ledger names are derived
+// <done>.<kind>.<id>; the stream and consumer names are derived
 // from them (proto.Names). Bees with the same bases share one queue; bees
 // with other buckets on the same nats need other bases
 type NATS struct {

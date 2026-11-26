@@ -4,8 +4,8 @@
 // consumer shared by every bee of the same bases, so the instances share
 // the queue; results (the json of the result) go out on
 // <done>.<kind>.<id> into the results stream, kept BEE_NATS_RESULT_TTL,
-// where a client reads the result of its job. bee makes both streams, the
-// consumer and the ledger at start.
+// where a client reads the result of its job. bee makes both streams and the
+// consumer at start.
 //
 // A delivery ends one of three ways:
 //
@@ -15,10 +15,9 @@
 //	                           MaxDeliver is the last: its failure is published and acked
 //	unfinished at shutdown     no result, nak at once: another bee takes it
 //
-// A job delivered again (a lost ack or result, a bee that died after
-// publishing its output) finds its output stored, but the job saved its
-// result in the ledger right before: it gets that result again instead of
-// ALREADY_EXISTS.
+// A job delivered again (a lost ack or result, a bee that died) runs
+// again, writes over its keys and publishes its result again. bee never
+// refuses a job because its keys are taken.
 //
 // A message on an unknown kind, or whose id cannot be read as a valid job
 // id, is terminated and logged; another message that is not a job is a
@@ -54,14 +53,13 @@ type Consumer struct {
 	nc     *nats.Conn
 	js     jetstream.JetStream
 	cons   jetstream.Consumer
-	ledger *Ledger
 	engine *engine.Engine
 	slots  chan struct{} // a slot is pulled for: never more jobs than the engine runs at once
 	jobs   sync.WaitGroup
 }
 
 // Open connects (reconnecting forever after that), makes or updates the
-// streams, the consumer and the ledger, and returns the consumer, not yet
+// streams and the consumer, and returns the consumer, not yet
 // pulling. worker names the connection.
 func Open(ctx context.Context, cfg config.NATS, worker string, log *slog.Logger) (*Consumer, error) {
 	// the connection, with the token when there is one
@@ -85,8 +83,7 @@ func Open(ctx context.Context, cfg config.NATS, worker string, log *slog.Logger)
 	return a, nil
 }
 
-// setup makes the job stream, the results stream, the shared consumer and
-// the ledger bucket.
+// setup makes the job stream, the results stream and the shared consumer.
 func (a *Consumer) setup(ctx context.Context) error {
 	js, err := jetstream.New(a.nc)
 	if err != nil {
@@ -137,25 +134,8 @@ func (a *Consumer) setup(ctx context.Context) error {
 		return fmt.Errorf("nats: consumer %s: %w", a.names.Consumer(), err)
 	}
 
-	// the ledger
-	kv, err := js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
-		Bucket:   a.names.Ledger(),
-		TTL:      a.cfg.ResultTTL,
-		Storage:  storage,
-		Replicas: a.cfg.Replicas,
-	})
-	if err != nil {
-		return fmt.Errorf("nats: ledger %s: %w", a.names.Ledger(), err)
-	}
-
 	a.js = js
-	a.ledger = &Ledger{kv: kv}
 	return nil
-}
-
-// Ledger is the result ledger of the jobs, for engine.New.
-func (a *Consumer) Ledger() *Ledger {
-	return a.ledger
 }
 
 // Ready reports the connection to NATS (readiness).
@@ -268,6 +248,7 @@ func (a *Consumer) handle(work context.Context, msg jetstream.Msg) {
 		return
 	}
 
+	// a redelivery is counted; the job runs again
 	if meta.NumDelivered > 1 {
 		a.engine.Metrics.Retried()
 	}
@@ -400,32 +381,4 @@ func (a *Consumer) backoff(n uint64) time.Duration {
 	}
 
 	return min(d, a.cfg.RetryMaxDelay)
-}
-
-// Ledger is engine.Ledger over the JetStream key-value bucket of the
-// name: the result json of a done job under its key, kept
-// BEE_NATS_RESULT_TTL. Shared by every bee of the name, so a redelivery to
-// another instance finds it too.
-type Ledger struct {
-	kv jetstream.KeyValue
-}
-
-// Save stores value under key.
-func (a *Ledger) Save(ctx context.Context, key string, value []byte) error {
-	_, err := a.kv.Put(ctx, key, value)
-	return err
-}
-
-// Load reads the value under key; false when there is none (never saved
-// or expired).
-func (a *Ledger) Load(ctx context.Context, key string) ([]byte, bool, error) {
-	entry, err := a.kv.Get(ctx, key)
-	switch {
-	case errors.Is(err, jetstream.ErrKeyNotFound):
-		return nil, false, nil
-	case err != nil:
-		return nil, false, err
-	}
-
-	return entry.Value(), true, nil
 }

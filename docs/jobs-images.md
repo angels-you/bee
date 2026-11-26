@@ -131,7 +131,7 @@ Results carry no metadata: no EXIF, XMP, IPTC, ICC or comments.
 Each result is written to its `output` key, and nothing else is written.
 
 - **Existing objects:** an object already at an `output` key is
-  overwritten. Image jobs have no `ALREADY_EXISTS` check and no ledger.
+  overwritten. bee does not check existing keys.
   Choose keys that do not collide with objects you want to keep; that is
   your concern, not bee's.
 - **Failures:** a job that fails before the upload touches nothing in

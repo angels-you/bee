@@ -45,9 +45,7 @@ type audioRendition struct {
 	track    *track
 }
 
-// Audio runs one audio job: check and defaults → slot → master not yet
-// published (else ALREADY_EXISTS or the saved result of this same
-// job) → download → ffprobe and limits → analysis → fingerprint →
+// Audio runs one audio job: check and defaults → slot → download → ffprobe and limits → analysis → fingerprint →
 // loudness → HLS of all variants → waveform → upload in waves, master
 // last → verify. A failed job returns a Result with Error and the same
 // *code.Error as the error
@@ -80,15 +78,6 @@ func (a *Engine) Audio(ctx context.Context, j audio.Job) (audio.Result, error) {
 		return r.fail(e)
 	}
 	defer end()
-
-	// master already published: reject, or this job already ran
-	stored, done, e := r.published(ctx)
-	if e != nil {
-		return r.fail(e)
-	}
-	if done {
-		return r.again(stored)
-	}
 
 	// work
 	e = r.pipeline(ctx)
@@ -552,7 +541,7 @@ func (a *audioRun) waveform(ctx context.Context) *code.Error {
 
 // upload publishes in waves, master last: init, segments and waveform json;
 // metadata and analysis json (metadata lists the variants, measured
-// from the published segments); media playlists; result to the ledger;
+// from the published segments); media playlists;
 // master. A published master is a complete set: on any error it is not
 // published. With a key, segments are encrypted and media playlists get
 // key lines; master has no key
@@ -584,14 +573,6 @@ func (a *audioRun) upload(ctx context.Context) *code.Error {
 
 	// wave 3: media playlists
 	e = a.putAll(ctx, lists)
-	if e != nil {
-		return e
-	}
-
-	// result to the ledger before master
-	a.res.Size = a.uploaded
-	a.res.Elapsed = a.elapsed()
-	e = a.remember(ctx, a.res)
 	if e != nil {
 		return e
 	}
@@ -735,18 +716,6 @@ func (a *audioRun) done() (audio.Result, error) {
 	a.work.done("renditions", len(a.res.Renditions))
 
 	return a.res, nil
-}
-
-// again returns the saved result of a job that already ran
-func (a *audioRun) again(stored []byte) (audio.Result, error) {
-	var res audio.Result
-	err := json.Unmarshal(stored, &res)
-	if err != nil {
-		return a.fail(code.New(code.InternalTemporaryError, "ledger result is not json", err))
-	}
-
-	a.work.again()
-	return res, nil
 }
 
 // fail returns a failed result: id, error and what is known about the source

@@ -1,6 +1,6 @@
 // Package engine is the core of bee: concurrency slots and the QueueWait queue,
 // job timeout, temp folder, source download, result uploads in waves,
-// the result ledger and metrics, shared by all types. The pipelines
+// and metrics, shared by all types. The pipelines
 // themselves are audio.go (ffmpeg, audio HLS), video.go (ffmpeg, HLS and MP4),
 // images.go (vips); processing tools live in the subpackages audio, video,
 // images. Transports call only Audio, Stream, Video and Images.
@@ -27,23 +27,11 @@ import (
 	"github.com/angels-you/bee/pkg/types/code"
 )
 
-// Ledger holds the results of finished jobs, kept by the transport (nats: in
-// JetStream key-value). A job saves its result right before publishing
-// its entry object (master playlist, mp4). A job that finds its entry
-// already published looks up its result: found means the job was already
-// done (redelivery after a lost ack or a crash) and the result is
-// returned again; not found means the keys belong to someone else: ALREADY_EXISTS
-type Ledger interface {
-	Save(ctx context.Context, key string, value []byte) error
-	Load(ctx context.Context, key string) (value []byte, found bool, err error)
-}
-
 // Engine runs jobs of all types. It is safe for concurrent use;
 // BEE_CONCURRENCY limits how many jobs run at once
 type Engine struct {
 	cfg     *config.Config
 	storage storage.Storage
-	ledger  Ledger
 	log     *slog.Logger
 	slots   chan struct{}
 	down    map[proto.Kind]*storage.Downloader // by job type: each has its own size limit
@@ -56,9 +44,7 @@ type Engine struct {
 }
 
 // New builds the engine from the config: temp folder, ffmpeg and vips checks.
-// ledger may be nil: then a published entry is always
-// ALREADY_EXISTS
-func New(cfg *config.Config, st storage.Storage, ledger Ledger, log *slog.Logger) (*Engine, error) {
+func New(cfg *config.Config, st storage.Storage, log *slog.Logger) (*Engine, error) {
 	switch {
 	case cfg == nil:
 		return nil, errors.New("engine: config is required")
@@ -71,7 +57,6 @@ func New(cfg *config.Config, st storage.Storage, ledger Ledger, log *slog.Logger
 	a := &Engine{
 		cfg:     cfg,
 		storage: st,
-		ledger:  ledger,
 		log:     log,
 		slots:   make(chan struct{}, cfg.Concurrency),
 		Metrics: &Metrics{},

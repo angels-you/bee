@@ -95,7 +95,7 @@ The request lasts as long as the job. A done job answers `200` with the result:
 }
 ```
 
-A failed job answers an HTTP status that matches its error code (for example `400` for `INVALID_JOB`, `409` for `ALREADY_EXISTS`, `503` for `INTERNAL_TEMPORARY_ERROR`) and the result with `error` set:
+A failed job answers an HTTP status that matches its error code (for example `400` for `INVALID_JOB`, `422` for `INVALID_AUDIO`, `503` for `INTERNAL_TEMPORARY_ERROR`) and the result with `error` set:
 
 ```json
 {"id": "photo-1", "elapsed": 210, "error": {"code": "SOURCE_UNAVAILABLE", "message": "...", "retryable": true}}
@@ -161,7 +161,7 @@ Every `output` in a job is a key in the one storage of this bee, never a bucket 
 - `BEE_STORAGE=local`: the file `<BEE_LOCAL_DIR>/<key>`. With the commands above, `photos/1/small.webp` is `./out/photos/1/small.webp` on the host.
 - `BEE_STORAGE=s3`: the object `<key>` in `BEE_S3_BUCKET`, under `BEE_S3_PREFIX/` when a prefix is set.
 
-Audio and video publish the entry object (master playlist or MP4) last, so a client that sees it sees a complete output. They refuse a key that is already published with `ALREADY_EXISTS`: a new run needs new keys. Images overwrite existing keys.
+Audio and video publish the entry object (master playlist or MP4) last, so a client that sees it sees a complete output. bee never checks whether keys are taken: every job writes over what lies at its keys, so choosing free keys is up to you.
 
 ## Next
 

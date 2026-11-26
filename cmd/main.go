@@ -98,8 +98,8 @@ func (a *app) run() int {
 	return code
 }
 
-// start opens the storage, the nats consumer (its ledger goes into the
-// engine) and the engine, and logs what is on.
+// start opens the storage, the engine and the nats consumer, and logs
+// what is on.
 func (a *app) start(ctx context.Context) error {
 	cfg := a.cfg
 
@@ -110,8 +110,14 @@ func (a *app) start(ctx context.Context) error {
 	}
 	a.store = st
 
-	// nats first: its ledger keeps the results of redelivered jobs
-	var ledger engine.Ledger
+	// the engine checks ffmpeg and vips
+	e, err := engine.New(cfg, st, a.log)
+	if err != nil {
+		return err
+	}
+	a.engine = e
+
+	// nats
 	if cfg.NATS.Enabled() {
 		cons, err := natsserver.Open(ctx, cfg.NATS, cfg.WorkerID, a.log)
 		if err != nil {
@@ -119,15 +125,7 @@ func (a *app) start(ctx context.Context) error {
 		}
 		a.nats = cons
 		a.probes = append(a.probes, cons)
-		ledger = cons.Ledger()
 	}
-
-	// the engine checks ffmpeg and vips
-	e, err := engine.New(cfg, st, ledger, a.log)
-	if err != nil {
-		return err
-	}
-	a.engine = e
 
 	a.log.Info("bee: started", a.describe()...)
 	return nil

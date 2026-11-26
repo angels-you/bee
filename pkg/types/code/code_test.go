@@ -38,7 +38,7 @@ func TestRetryable(t *testing.T) {
 		}
 	}
 
-	if len(CodeIndexes()) != 26 {
+	if len(CodeIndexes()) != 25 {
 		t.Errorf("%d codes", len(CodeIndexes()))
 	}
 }

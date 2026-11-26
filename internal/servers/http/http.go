@@ -111,8 +111,6 @@ func (a *Server) status(err error) int {
 		code.InvalidSound, code.InvalidWatermark, code.DimensionLimitExceeded, code.PixelLimitExceeded,
 		code.DurationLimitExceeded, code.NoRendition, code.OutputTooLarge, code.EncodeFailed, code.VerifyFailed:
 		return http.StatusUnprocessableEntity
-	case code.AlreadyExists:
-		return http.StatusConflict
 	case code.SourceTooLarge:
 		return http.StatusRequestEntityTooLarge
 	case code.SourceUrlExpired:

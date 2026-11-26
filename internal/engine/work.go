@@ -2,9 +2,6 @@ package engine
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"github.com/angels-you/bee/pkg/proto"
 	"log/slog"
@@ -20,13 +17,13 @@ import (
 )
 
 // work is the shared state of one job of any type: slot, timeout, folder,
-// uploads, ledger, metrics, logs
+// uploads, metrics, logs
 type work struct {
 	engine *Engine
 	kind   string // audio, stream, video, images
 	id     string
 	input  string // source url, logged without query
-	output string // job entry object (ledger key); empty for images
+	output string // job entry object (master playlist, mp4); empty for images
 	start  time.Time
 	dir    string // job temp folder
 	log    *slog.Logger
@@ -137,71 +134,6 @@ func (a *work) storageError(ctx context.Context, what string, err error) *code.E
 	return code.New(code.StorageUnavailable, what+" failed", err)
 }
 
-// published reports whether the entry object is already in storage. No: the job runs. Yes:
-// the result of this same job from the ledger (done true), else ALREADY_EXISTS:
-// a new run needs new keys. res is the result as json
-func (a *work) published(ctx context.Context) (res []byte, done bool, e *code.Error) {
-	exists, err := a.engine.storage.Exists(ctx, a.output)
-	if err != nil {
-		return nil, false, a.storageError(ctx, "output check", err)
-	}
-
-	if !exists {
-		return nil, false, nil
-	}
-
-	// whose object is it
-	taken := code.New(code.AlreadyExists, "an object is already stored at output", nil)
-	ledger := a.engine.ledger
-	if ledger == nil {
-		return nil, false, taken
-	}
-
-	res, found, err := ledger.Load(ctx, a.ledgerKey())
-	switch {
-	case err != nil && ctx.Err() != nil:
-		return nil, false, code.As(ctx.Err())
-	case err != nil:
-		return nil, false, code.New(code.InternalTemporaryError, "ledger lookup failed", err)
-	case !found:
-		return nil, false, taken
-	}
-
-	return res, true, nil
-}
-
-// remember saves the result to the ledger (if there is one) before publishing the entry
-// object; an error leaves the entry unpublished
-func (a *work) remember(ctx context.Context, res any) *code.Error {
-	ledger := a.engine.ledger
-	if ledger == nil {
-		return nil
-	}
-
-	data, err := json.Marshal(res)
-	if err != nil {
-		return code.New(code.InternalTemporaryError, "result json", err)
-	}
-
-	err = ledger.Save(ctx, a.ledgerKey(), data)
-	if err == nil {
-		return nil
-	}
-
-	if ctx.Err() != nil {
-		return code.As(ctx.Err())
-	}
-
-	return code.New(code.InternalTemporaryError, "ledger save failed", err)
-}
-
-// ledgerKey is the ledger key: sha256 of the type, id and entry object
-func (a *work) ledgerKey() string {
-	sum := sha256.Sum256([]byte(a.kind + "\n" + a.id + "\n" + a.output))
-
-	return hex.EncodeToString(sum[:])
-}
-
 // stored reports that every key is in storage
 func (a *work) stored(ctx context.Context, keys []string) *code.Error {
 	for _, key := range keys {
@@ -233,14 +165,6 @@ func (a *work) done(attrs ...any) {
 		"elapsed_ms", elapsed.Milliseconds(),
 	)
 	a.log.Info("engine: done", attrs...)
-}
-
-// again returns the saved result of a job that already ran
-func (a *work) again() {
-	elapsed := time.Since(a.start)
-	a.engine.Metrics.finished(a.kind, "", elapsed)
-
-	a.log.Info("engine: already done, the stored result is returned", "elapsed_ms", elapsed.Milliseconds())
 }
 
 // fail handles a failed job: metrics and log without the url query

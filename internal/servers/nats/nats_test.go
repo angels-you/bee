@@ -22,7 +22,7 @@ func TestConsumer(t *testing.T) {
 	bench := &testbee.Bench{T: t}
 	bench.Start()
 
-	// the consumer, its ledger in the engine
+	// the consumer
 	cfg := bench.Config.NATS
 	cfg.URL = testbee.NATS(t, "")
 	cfg.Storage = "memory"
@@ -69,23 +69,6 @@ func TestConsumer(t *testing.T) {
 	json.Unmarshal(data, &res)
 	if res.Error == nil || res.Error.Code != "INVALID_JOB" {
 		t.Errorf("bad job result %s", data)
-	}
-
-	// the ledger
-	ledger := cons.Ledger()
-	err = ledger.Save(ctx, "k", []byte("v"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	value, found, err := ledger.Load(ctx, "k")
-	if err != nil || !found || string(value) != "v" {
-		t.Errorf("ledger %q %v %v", value, found, err)
-	}
-
-	_, found, _ = ledger.Load(ctx, "missing")
-	if found {
-		t.Error("missing key found")
 	}
 
 	// ready

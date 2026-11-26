@@ -94,8 +94,8 @@ The only required fields are `id`, `input` and `output`.
 2. Take a job slot. If none is free within `BEE_QUEUE_WAIT`, the job fails
    with `INTERNAL_TEMPORARY_ERROR`. Then start the timeout and the temp
    folder.
-3. Check whether an object already exists at `output`. If it does, see
-   [ALREADY_EXISTS and the ledger](#already_exists-and-the-ledger).
+3. Existing objects at the keys are not checked: the job writes over
+   them. A NATS redelivery runs the job again.
 4. `download`: the original, with its sha256 and size.
 5. `probe`: ffprobe, then the codec and duration limits. Accepted source
    codecs are mp3, flac, pcm (s16/s24/s32/f32 le, s16/s24/f32 be, u8), aac,
@@ -183,33 +183,20 @@ upload at once, and the first error cancels the wave and fails the job.
 1. `init.mp4`, segments, and the waveform json.
 2. The metadata and analysis json.
 3. The media playlists, which need the IVs from wave 1.
-4. The result is saved to the ledger, if there is one.
+4. bee checks that its uploaded files are in storage.
 5. The master playlist.
 
 So a master in storage means every file it points to is already there. A
 job that fails before step 5 publishes no master. It can leave other
 objects behind, and a rerun with the same keys overwrites them.
 
-## ALREADY_EXISTS and the ledger
+## Existing keys
 
-Before downloading, bee checks `output`:
-
-- **No object:** the job runs.
-- **Object present, no ledger:** the job fails with `ALREADY_EXISTS`. A
-  rerun needs a new `output`. There is no ledger when NATS is off
-  (`BEE_NATS_URL` empty).
-- **Object present, ledger has a result for this job:** that stored result
-  is returned as a success, and nothing is processed again. This happens on
-  a NATS redelivery after a lost ack or a crash after the master was
-  published.
-- **Object present, ledger has no result:** the job fails with
-  `ALREADY_EXISTS`.
-
-The ledger key is sha256 of `kind`, `id` and `output`. Entries live for
-`BEE_NATS_RESULT_TTL`. When NATS is on, the ledger is shared by every
-transport of the bee. So a job sent again with the same `id` and `output`
-inside that TTL gets the old result back, even if its other fields
-changed. See [transports.md](transports.md#the-ledger).
+bee never checks whether the keys of a job are taken: every job that
+arrives runs and writes over whatever lies there, on every transport.
+Keeping keys apart is up to you. A NATS redelivery (lost ack, crashed bee)
+runs the job again and publishes its result again. See
+[transports.md](transports.md#redelivery).
 
 ## Result
 

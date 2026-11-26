@@ -151,33 +151,36 @@ func TestAudioEncrypted(t *testing.T) {
 	}
 }
 
-// TestRerun checks that rerunning the same job returns the saved result, while another job
-// on the same keys gets ALREADY_EXISTS
+// TestRerun checks that bee writes over taken keys: the same job and
+// another job on the same keys both run again and write again
 func TestRerun(t *testing.T) {
 	f := fixture{}
 	f.init(t)
 	ctx := context.Background()
 
-	// audio
-	first, err := f.bench.Engine.Audio(ctx, f.bench.Audio("r1", "rerun/a"))
+	// audio: the first run
+	_, err := f.bench.Engine.Audio(ctx, f.bench.Audio("r1", "rerun/a"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	puts := f.bench.Store.Puts()
 
-	again, err := f.bench.Engine.Audio(ctx, f.bench.Audio("r1", "rerun/a"))
+	// the same job again: it runs and writes again
+	_, err = f.bench.Engine.Audio(ctx, f.bench.Audio("r1", "rerun/a"))
 	switch {
 	case err != nil:
 		t.Fatalf("rerun: %v", err)
-	case again.SHA256 != first.SHA256:
-		t.Error("rerun result differs")
+	case f.bench.Store.Puts() <= puts:
+		t.Error("rerun did not write")
 	}
 
+	// another job on the same keys: it runs too
 	_, err = f.bench.Engine.Audio(ctx, f.bench.Audio("other", "rerun/a"))
-	if f.codeOf(err) != code.AlreadyExists {
+	if err != nil {
 		t.Errorf("other job: %v", err)
 	}
 
-	// video
+	// video: the same and another job on the same keys
 	_, err = f.bench.Engine.Video(ctx, f.bench.Video("v1", "rerun/v"))
 	if err != nil {
 		t.Fatal(err)
@@ -189,7 +192,7 @@ func TestRerun(t *testing.T) {
 	}
 
 	_, err = f.bench.Engine.Video(ctx, f.bench.Video("v2", "rerun/v"))
-	if f.codeOf(err) != code.AlreadyExists {
+	if err != nil {
 		t.Errorf("other video job: %v", err)
 	}
 }

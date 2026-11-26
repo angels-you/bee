@@ -64,7 +64,6 @@ curl -sS -X POST http://bee:8080/v1/images \
 | 200 | the job is done (no `error`) |
 | 400 | `INVALID_JOB`, `INVALID_PATH`, `INVALID_DIMENSIONS`, `INVALID_QUALITY` |
 | 401 | missing or wrong token |
-| 409 | `ALREADY_EXISTS` |
 | 410 | `SOURCE_URL_EXPIRED` |
 | 413 | `SOURCE_TOO_LARGE` |
 | 422 | `UNSUPPORTED_CODEC`, `UNSUPPORTED_FORMAT`, `INVALID_AUDIO`, `INVALID_VIDEO`, `INVALID_IMAGE`, `INVALID_SOUND`, `INVALID_WATERMARK`, `DIMENSION_LIMIT_EXCEEDED`, `PIXEL_LIMIT_EXCEEDED`, `DURATION_LIMIT_EXCEEDED`, `NO_RENDITION`, `OUTPUT_TOO_LARGE`, `ENCODE_FAILED`, `VERIFY_FAILED` |
@@ -124,7 +123,6 @@ returned. Use HTTP or NATS if you need it.
 | gRPC code | bee codes |
 |---|---|
 | `INVALID_ARGUMENT` | `INVALID_JOB`, `INVALID_PATH`, `INVALID_DIMENSIONS`, `INVALID_QUALITY`, `UNSUPPORTED_CODEC`, `UNSUPPORTED_FORMAT`, `INVALID_AUDIO`, `INVALID_VIDEO`, `INVALID_IMAGE`, `INVALID_SOUND`, `INVALID_WATERMARK`, `SOURCE_TOO_LARGE`, `DIMENSION_LIMIT_EXCEEDED`, `PIXEL_LIMIT_EXCEEDED`, `DURATION_LIMIT_EXCEEDED`, `NO_RENDITION`, `OUTPUT_TOO_LARGE` |
-| `ALREADY_EXISTS` | `ALREADY_EXISTS` |
 | `FAILED_PRECONDITION` | `SOURCE_URL_EXPIRED` |
 | `DEADLINE_EXCEEDED` | `DOWNLOAD_TIMEOUT`, `STORAGE_TIMEOUT` |
 | `UNAVAILABLE` | `SOURCE_UNAVAILABLE`, `STORAGE_UNAVAILABLE`, `INTERNAL_TEMPORARY_ERROR` |
@@ -156,10 +154,10 @@ have JetStream on.
 | `BEE_NATS_MAX_DELIVER` | `5` | Deliveries of one job. The error of the last one is final. |
 | `BEE_NATS_RETRY_DELAY` | `10s` | Nak delay after the first delivery. Doubles after each. |
 | `BEE_NATS_RETRY_MAX_DELAY` | `5m` | Longest nak delay. |
-| `BEE_NATS_STORAGE` | `file` | `file` or `memory`, for streams and the ledger. |
+| `BEE_NATS_STORAGE` | `file` | `file` or `memory`, for the streams. |
 | `BEE_NATS_REPLICAS` | `1` | 1..5. |
 | `BEE_NATS_MAX_AGE` | `0s` | An unprocessed job is deleted after this long. 0 means never. |
-| `BEE_NATS_RESULT_TTL` | `24h` | How long results and ledger entries are kept. |
+| `BEE_NATS_RESULT_TTL` | `24h` | How long results are kept. |
 
 ### Subjects
 
@@ -185,7 +183,6 @@ dots changed to `_`, in upper case:
 | job stream | `<jobs>` as a name | `BEE_JOBS_NEW` | subjects `<jobs>.*`, work-queue retention, `BEE_NATS_MAX_AGE` |
 | result stream | `<done>` as a name | `BEE_JOBS_DONE` | subjects `<done>.>`, limits retention, kept `BEE_NATS_RESULT_TTL` |
 | consumer | the job stream name | `BEE_JOBS_NEW` | durable pull, explicit ack, `BEE_NATS_ACK_WAIT`; bee counts deliveries itself |
-| ledger (key-value) | `<job stream>_LEDGER` | `BEE_JOBS_NEW_LEDGER` | TTL `BEE_NATS_RESULT_TTL` |
 
 ### Delivery semantics
 
@@ -217,26 +214,10 @@ A delivery ends in one of three ways:
   publish, the job is nak'ed and runs again. A result is never lost, but
   it can be published twice.
 
-### The ledger
+### Redelivery
 
-A redelivered job may find its output already published, for example when
-the ack or the result was lost, or a bee died right after publishing.
-
-Audio, stream and video jobs save their result in the ledger just before
-they publish the entry object (master playlist, playlist or mp4). A job
-whose entry already exists looks up the ledger:
-
-- **Found:** the stored result is returned as a success, with no new
-  processing.
-- **Not found:** `ALREADY_EXISTS`.
-
-The ledger key is sha256 of the kind, `id` and `output`. Entries are kept
-for `BEE_NATS_RESULT_TTL`. The ledger is shared by every bee of the group,
-and by HTTP and gRPC on a bee with NATS on. So a job resent with the same
-kind, `id` and `output` inside the TTL gets the old result back. Without
-NATS there is no ledger, and an existing entry is always `ALREADY_EXISTS`.
-
-Image jobs do not use the ledger. They overwrite their outputs.
+A redelivered job (lost ack, crashed bee) runs again, writes over its keys
+and publishes its result again on `<done>.<kind>.<id>`.
 
 ### Malformed messages
 
@@ -276,7 +257,7 @@ nats sub 'bee.jobs.done.images.photo-77' --count 1 &
 # 2. publish; a request to a stream subject returns the JetStream ack
 nats req bee.jobs.new.images "$(cat job.json)"
 
-# later: the last stored result of the job
+# later: the last result of the job
 nats stream get BEE_JOBS_DONE --last-for 'bee.jobs.done.images.photo-77'
 ```
 
@@ -286,11 +267,11 @@ Bees with the same bases share one queue and must share one storage: any
 of them may take any job. To run groups with different buckets on the same
 NATS server, give each group its own bases:
 
-| group | `BEE_NATS_JOBS` | `BEE_NATS_DONE` | job stream / consumer | result stream | ledger |
-|---|---|---|---|---|---|
-| default | `bee.jobs.new` | `bee.jobs.done` | `BEE_JOBS_NEW` | `BEE_JOBS_DONE` | `BEE_JOBS_NEW_LEDGER` |
-| eu | `eu.jobs.new` | `eu.jobs.done` | `EU_JOBS_NEW` | `EU_JOBS_DONE` | `EU_JOBS_NEW_LEDGER` |
-| us | `us.jobs.new` | `us.jobs.done` | `US_JOBS_NEW` | `US_JOBS_DONE` | `US_JOBS_NEW_LEDGER` |
+| group | `BEE_NATS_JOBS` | `BEE_NATS_DONE` | job stream / consumer | result stream |
+|---|---|---|---|---|
+| default | `bee.jobs.new` | `bee.jobs.done` | `BEE_JOBS_NEW` | `BEE_JOBS_DONE` |
+| eu | `eu.jobs.new` | `eu.jobs.done` | `EU_JOBS_NEW` | `EU_JOBS_DONE` |
+| us | `us.jobs.new` | `us.jobs.done` | `US_JOBS_NEW` | `US_JOBS_DONE` |
 
 Clients send to a group with the same bases: `proto.Names{Jobs, Done}` in
 Go, or the subjects above directly.

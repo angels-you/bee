@@ -1,5 +1,5 @@
-// Package testbee is the bee test bench: test config, in-memory storage and
-// ledger, a source server, nats-server for the test duration and a ready engine
+// Package testbee is the bee test bench: test config, in-memory storage, a
+// source server, nats-server for the test duration and a ready engine
 // with small sources of all three types
 package testbee
 
@@ -130,33 +130,6 @@ func (a *Store) Puts() int {
 	return a.puts
 }
 
-// Ledger is an in-memory engine.Ledger; the zero value is empty and ready
-type Ledger struct {
-	mu      sync.Mutex
-	results map[string][]byte
-}
-
-// Save stores the value under the key
-func (a *Ledger) Save(ctx context.Context, key string, value []byte) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if a.results == nil {
-		a.results = map[string][]byte{}
-	}
-	a.results[key] = value
-	return nil
-}
-
-// Load returns the value by key
-func (a *Ledger) Load(ctx context.Context, key string) ([]byte, bool, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	value, ok := a.results[key]
-	return value, ok, nil
-}
-
 // Sources is the test source server: files of Dir by name; a name under /hold/
 // responds only once Hold is closed (or the request is canceled); FailNext
 // makes the next requests for a name respond 503; requests are counted
@@ -221,14 +194,13 @@ func (a *Sources) FailNext(name string, n int) {
 	a.fail[name] = n
 }
 
-// Bench is the test engine: in-memory storage and ledger, a source server
+// Bench is the test engine: in-memory storage, a source server
 // over generated files, logs in Logs. Start builds it;
 // skips the test without ffmpeg, ffprobe or vips
 type Bench struct {
 	T       testing.TB
 	Config  *config.Config
 	Store   *Store
-	Ledger  *Ledger
 	Sources *Sources
 	Server  *httptest.Server
 	Logs    *bytes.Buffer
@@ -261,7 +233,6 @@ func (a *Bench) Start() {
 
 	// engine
 	a.Store = &Store{}
-	a.Ledger = &Ledger{}
 	a.Logs = &bytes.Buffer{}
 	a.Config = a.config()
 	a.Restart()
@@ -272,7 +243,7 @@ func (a *Bench) Restart() {
 	a.T.Helper()
 
 	log := slog.New(slog.NewJSONHandler(a.Logs, nil))
-	e, err := engine.New(a.Config, a.Store, a.Ledger, log)
+	e, err := engine.New(a.Config, a.Store, log)
 	if err != nil {
 		a.T.Fatalf("engine: %v", err)
 	}

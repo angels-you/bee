@@ -46,7 +46,6 @@ func (a Kind) Valid() bool {
 //	job stream        <jobs> as a name       BEE_JOBS_NEW   (dots → _, upper case)
 //	result stream     <done> as a name       BEE_JOBS_DONE
 //	consumer          the job stream name    BEE_JOBS_NEW
-//	ledger (kv)       <job stream>_LEDGER    BEE_JOBS_NEW_LEDGER
 //
 // Bees with the same bases share one queue; bees with other buckets on
 // the same nats need other bases.
@@ -183,11 +182,6 @@ func (a Names) DoneStream() string {
 // Consumer is the durable pull consumer every bee of the group shares
 func (a Names) Consumer() string {
 	return a.JobsStream()
-}
-
-// Ledger is the JetStream key-value bucket of the results of done jobs
-func (a Names) Ledger() string {
-	return a.JobsStream() + "_LEDGER"
 }
 
 // name is a subject base as a JetStream name: dots to _, upper case

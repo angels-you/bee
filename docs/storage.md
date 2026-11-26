@@ -175,34 +175,24 @@ existing object under the same key is overwritten. Choosing keys that do
 not collide is up to the client. A retry of the same job simply writes the
 same keys again.
 
-### Audio and video: ALREADY_EXISTS
+### Audio and video: overwrite, entry object last
 
-Audio, stream (HLS) and video (MP4) jobs have an **entry object**: the
-master playlist (`output` of audio and stream) or the MP4 (`output` of
-video). The entry object is written **last**, after every segment and
-playlist, so whoever sees it sees a complete set.
+Audio and video jobs do not look at what is stored either: they write over
+whatever lies at their keys. Taken keys are the client's concern.
 
-Before any work bee checks whether the entry object already exists:
-
-- It does not exist: the job runs.
-- It exists, and the **ledger** has the result of this same job (same
-  type, id and output): the job already ran (for example its result or ack
-  was lost and NATS delivered it again). bee returns that saved result
-  without doing the work again.
-- It exists and the ledger has no such result: the key belongs to someone
-  else. The job fails with `ALREADY_EXISTS` (not retryable). A new run needs
-  new keys.
-
-The ledger exists only with NATS on: a JetStream key-value bucket
-`<job stream>_LEDGER` (default `BEE_JOBS_NEW_LEDGER`), shared by every bee
-of the same subject bases and kept `BEE_NATS_RESULT_TTL`. bee writes the
-result to the ledger right before it writes the entry object. Without NATS
-there is no ledger, so an existing entry object is always
-`ALREADY_EXISTS`, also when a job sent over HTTP or gRPC is repeated.
+They have an **entry object**: the master playlist (`output` of audio and
+stream) or the MP4 (`output` of video). The entry object is written
+**last**, after every segment and playlist, and after bee has checked that
+its own files are in storage. Whoever sees the entry sees a complete set.
 
 A job that failed half way may leave segments behind without an entry
 object. A retry with the same keys overwrites them and writes the entry
 object at the end.
+
+Every job that arrives runs and writes over its keys, on every transport.
+bee never checks whether keys are taken. A NATS redelivery (lost ack,
+crashed bee) runs the job again. See
+[transports.md](transports.md#redelivery).
 
 ## Source download
 

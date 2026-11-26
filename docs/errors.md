@@ -34,7 +34,7 @@ A failed job answers the **result** of its type (`audio.Result`,
 `video.Result`, `images.Result`) with `id` and `error` set and no outputs:
 
 ```json
-{"id": "track-1", "error": {"code": "ALREADY_EXISTS", "message": "an object is already stored at output", "retryable": false}}
+{"id": "track-1", "error": {"code": "INVALID_AUDIO", "message": "the audio has no audio stream", "retryable": false}}
 ```
 
 None of the outputs of a failed job count, even if some objects were
@@ -71,7 +71,6 @@ redelivered: the same job carries the same expired url, so retry with a
 | `INVALID_QUALITY` | A quality is outside 0..100 or missing where it is required | no | no | 400 | `InvalidArgument` |
 | `UNSUPPORTED_CODEC` | The job asks for a codec, pixel format, preset or image format bee does not encode | no | no | 422 | `InvalidArgument` |
 | `UNSUPPORTED_FORMAT` | The container or codec of the source is one bee does not accept | no | no | 422 | `InvalidArgument` |
-| `ALREADY_EXISTS` | An object is already stored at the output key: a new run needs new keys (audio and video, see [storage.md](storage.md#existing-keys)) | no | no | 409 | `AlreadyExists` |
 | `INVALID_AUDIO` | The audio is empty, corrupted, silent or has no audio stream | no | no | 422 | `InvalidArgument` |
 | `INVALID_VIDEO` | The video is empty, corrupted, has no video stream or cannot be decoded | no | no | 422 | `InvalidArgument` |
 | `INVALID_IMAGE` | The image is empty, corrupted or cannot be decoded | no | no | 422 | `InvalidArgument` |
@@ -137,9 +136,9 @@ the code:
 A job id must be 1..128 characters of `A-Z a-z 0-9 _ -`; it is part of the
 result subject.
 
-A redelivered job whose entry object is already written gets its earlier
-result from the ledger instead of `ALREADY_EXISTS` (see
-[storage.md](storage.md#existing-keys)).
+bee never checks whether output keys are taken: a job writes over them. A
+redelivered job runs again and publishes its result again (see
+[transports.md](transports.md#redelivery)).
 
 ## Go clients
 

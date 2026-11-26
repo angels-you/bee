@@ -118,8 +118,6 @@ res, err := c.Stream(ctx, job)
 if err != nil {
 	e := code.As(err) // *code.Error for any error
 	switch {
-	case e.Code == code.AlreadyExists:
-		// the output keys are taken: send the job with new keys
 	case e.Retryable:
 		// try again later; SOURCE_URL_EXPIRED needs a new job with a fresh url
 	default:
@@ -131,7 +129,7 @@ if err != nil {
 
 `code.Error` is `{Code, Message, Retryable}` in JSON (`code`, `message`, `retryable`). `Retryable` mirrors `Code.Retryable()`, so the client needs no code table. `code.As` returns any error as `*code.Error`: a typed one as is, a context deadline or cancel as `INTERNAL_TEMPORARY_ERROR`. Every code: [errors.md](errors.md).
 
-`ALREADY_EXISTS`: audio and video refuse an output whose entry object (master playlist or MP4) is already published. The exception is a redelivery of the same job on NATS: bee finds the saved result in its ledger and returns it again. Images overwrite existing keys.
+Existing keys: bee never checks them. Every job type writes over whatever lies at its output keys; keeping keys apart is up to you. A job sent again always runs again, on every transport; so does a NATS redelivery ([transports.md](transports.md#redelivery)).
 
 ## Timeouts and contexts
 

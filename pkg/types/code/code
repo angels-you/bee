@@ -13,7 +13,6 @@ INVALID_DIMENSIONS       // @retryable=false @redeliver=false desc{a size of the
 INVALID_QUALITY          // @retryable=false @redeliver=false desc{a quality is outside 0..100 or missing where it is required}
 UNSUPPORTED_CODEC        // @retryable=false @redeliver=false desc{the job asks for a codec, pixel format, preset or image format bee does not encode}
 UNSUPPORTED_FORMAT       // @retryable=false @redeliver=false desc{the container or codec of the source is one bee does not accept}
-ALREADY_EXISTS           // @retryable=false @redeliver=false desc{an object is already stored at the output key: a new run needs new keys}
 INVALID_AUDIO            // @retryable=false @redeliver=false desc{the audio is empty, corrupted, silent or has no audio stream}
 INVALID_VIDEO            // @retryable=false @redeliver=false desc{the video is empty, corrupted, has no video stream or cannot be decoded}
 INVALID_IMAGE            // @retryable=false @redeliver=false desc{the image is empty, corrupted or cannot be decoded}

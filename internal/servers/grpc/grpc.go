@@ -145,8 +145,6 @@ func (a *Server) status(c code.Code) codes.Code {
 		code.InvalidWatermark, code.SourceTooLarge, code.DimensionLimitExceeded, code.PixelLimitExceeded,
 		code.DurationLimitExceeded, code.NoRendition, code.OutputTooLarge:
 		return codes.InvalidArgument
-	case code.AlreadyExists:
-		return codes.AlreadyExists
 	case code.SourceUrlExpired:
 		return codes.FailedPrecondition
 	case code.DownloadTimeout, code.StorageTimeout:

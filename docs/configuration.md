@@ -136,13 +136,12 @@ only then.
 | `BEE_NATS_STORAGE` | `file` | JetStream storage of the streams: `file` or `memory` |
 | `BEE_NATS_REPLICAS` | `1` | Stream replicas, `1..5`, at most the number of servers in the cluster |
 | `BEE_NATS_MAX_AGE` | `0s` | A job not taken within this time is deleted; `0s`: never |
-| `BEE_NATS_RESULT_TTL` | `24h` | How long results (and the ledger) are kept; longer than a job may wait for redelivery |
+| `BEE_NATS_RESULT_TTL` | `24h` | How long results are kept; longer than a job may wait for redelivery |
 
 Subject bases are tokens of `A-Z a-z 0-9 _ -` joined by dots, without
 wildcards; the two bases must differ and one must not lie inside the other.
-Stream, consumer and ledger names are derived from the bases (dots to `_`,
-upper case): `bee.jobs.new` gives the stream and consumer `BEE_JOBS_NEW`
-and the ledger `BEE_JOBS_NEW_LEDGER`. Bees with the same bases share one
+Stream and consumer names are derived from the bases (dots to `_`,
+upper case): `bee.jobs.new` gives the stream and consumer `BEE_JOBS_NEW`. Bees with the same bases share one
 queue, so they must write to the same storage; bees with another bucket on
 the same NATS need other bases. See [transports.md](transports.md).
 

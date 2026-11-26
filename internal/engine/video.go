@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/angels-you/bee/pkg/proto"
 	"os"
@@ -93,8 +92,7 @@ func (a *Engine) Video(ctx context.Context, j video.Video) (video.Result, error)
 }
 
 // process is the shared pipeline of Stream and Video: the ffmpeg build supports the job →
-// slot → timeout → entry not yet published (else ALREADY_EXISTS or the
-// saved result of this same job) → downloads → ffprobe and limits →
+// slot → timeout → downloads → ffprobe and limits →
 // plan → one ffmpeg run and check → upload in waves, entry
 // last → result. The temp folder is removed in any case
 func (a *videoRun) process(ctx context.Context) (video.Result, error) {
@@ -118,15 +116,6 @@ func (a *videoRun) process(ctx context.Context) (video.Result, error) {
 		return a.fail(e)
 	}
 	defer end()
-
-	// entry already published: reject, or this job already ran
-	stored, done, e := a.published(ctx)
-	if e != nil {
-		return a.fail(e)
-	}
-	if done {
-		return a.again(stored)
-	}
 
 	// work
 	e = a.download(ctx)
@@ -397,7 +386,7 @@ func (a *videoRun) encode(ctx context.Context) *code.Error {
 // upload sends everything to storage in waves: init and segments (encrypted
 // with a key), preview images and previews; then the media playlists
 // of multiple variants (with EXT-X-KEY lines, so after each
-// segment and its IV); a check that everything is in place; result to the ledger;
+// segment and its IV); a check that everything is in place;
 // entry last, also checked. Entry published = everything published:
 // a job that failed earlier leaves no entry and can be retried with the same
 // keys
@@ -427,12 +416,6 @@ func (a *videoRun) upload(ctx context.Context) *code.Error {
 
 	// everything except the entry is in place
 	e = a.stored(ctx, a.required())
-	if e != nil {
-		return e
-	}
-
-	// the result is saved before the entry makes the job visible
-	e = a.remember(ctx, a.res)
 	if e != nil {
 		return e
 	}
@@ -679,18 +662,6 @@ func (a *videoRun) done() (video.Result, error) {
 	a.work.done("renditions", len(a.res.Profiles), "duration", a.res.Duration)
 
 	return a.res, nil
-}
-
-// again returns the saved result of a job that already ran
-func (a *videoRun) again(stored []byte) (video.Result, error) {
-	var res video.Result
-	err := json.Unmarshal(stored, &res)
-	if err != nil {
-		return a.fail(code.New(code.InternalTemporaryError, "ledger result is not json", err))
-	}
-
-	a.work.again()
-	return res, nil
 }
 
 // fail returns a failed result: id and error, nothing else is computed

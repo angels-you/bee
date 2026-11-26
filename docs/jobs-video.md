@@ -229,8 +229,8 @@ Outside Go, write the profile out. `Preset("720p")` is:
 1. Validate and fill the defaults (`videocheck.go`). Check that this
    ffmpeg build has the encoders the job needs, or fail with
    `UNSUPPORTED_CODEC`.
-2. Take a slot and start `BEE_VIDEO_TIMEOUT`. Check whether `output`
-   already exists (see [ALREADY_EXISTS](#already_exists-and-the-ledger)).
+2. Take a slot and start `BEE_VIDEO_TIMEOUT`. Existing objects at
+   the keys are not checked. A NATS redelivery runs the job again.
 3. Download the source, `options.sound` and the watermark. All downloads
    of a job share `BEE_DOWNLOAD_TIMEOUT`, and each file is limited to
    `BEE_VIDEO_MAX_SOURCE_MB`.
@@ -309,23 +309,18 @@ encrypted. The key is never stored or logged.
    IVs from wave 1.
 3. Bee checks that every object above is in storage (each media playlist,
    init, the first and last segment, thumbnails, preview).
-4. The result is saved to the ledger, if there is one.
-5. The entry object: master, the single media playlist, or the MP4. Then
+4. The entry object: master, the single media playlist, or the MP4. Then
    it is checked.
 
 An entry in storage means everything it references is in place. A job that
 fails earlier leaves no entry, so it can be rerun with the same keys. Its
 leftover objects get overwritten.
 
-### ALREADY_EXISTS and the ledger
+### Existing keys
 
-These rules are the same as for audio
-([jobs-audio.md](jobs-audio.md#already_exists-and-the-ledger)):
-
-- **Object at `output`, no ledger** (NATS off): `ALREADY_EXISTS`.
-- **Object at `output`, ledger has a result** for the same kind, `id` and
-  `output`: that stored result is returned.
-- **Object at `output`, ledger has no result:** `ALREADY_EXISTS`.
+The same as for audio ([jobs-audio.md](jobs-audio.md#existing-keys)):
+every job that arrives runs and writes over whatever lies at its keys;
+taken keys are your concern. A NATS redelivery runs the job again.
 
 ## Result
 
