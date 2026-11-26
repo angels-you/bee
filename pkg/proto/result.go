@@ -12,9 +12,9 @@ import (
 // status without a result).
 func Failure(res any, id any, meta map[string]any, e *code.Error) {
 	data, _ := json.Marshal(struct {
-		ID    any            `json:"id"`
-		Meta  map[string]any `json:"meta,omitempty"`
-		Error *code.Error    `json:"error"`
+		ID       any            `json:"id"`
+		UserMeta map[string]any `json:"user_meta,omitempty"`
+		Error    *code.Error    `json:"error"`
 	}{id, meta, e})
 
 	tools.Decode(data, res)

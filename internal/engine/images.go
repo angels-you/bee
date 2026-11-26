@@ -32,7 +32,7 @@ type imagesRun struct {
 // overwrites. A failed job returns a Result with Error and the same
 // *code.Error as the error
 func (a *Engine) Images(ctx context.Context, j images.Job) (images.Result, error) {
-	r := &imagesRun{work: a.newWork(proto.Images, j.ID, j.Input, j.Meta), job: j}
+	r := &imagesRun{work: a.newWork(proto.Images, j.ID, j.Input, j.UserMeta), job: j}
 
 	// the meta of the caller
 	e := r.checkMeta()
@@ -222,7 +222,7 @@ func (a *imagesRun) upload(ctx context.Context) *code.Error {
 // done returns a successful result
 func (a *imagesRun) done() (images.Result, error) {
 	a.res.ID = a.job.ID
-	a.res.Meta = a.job.Meta
+	a.res.UserMeta = a.job.UserMeta
 	a.res.Elapsed = a.elapsed()
 	a.work.done("outputs", len(a.res.Tasks))
 
@@ -232,7 +232,7 @@ func (a *imagesRun) done() (images.Result, error) {
 // fail returns a failed result: no tasks, what is known about the source, the error
 func (a *imagesRun) fail(e *code.Error) (images.Result, error) {
 	a.res.ID = a.job.ID
-	a.res.Meta = a.job.Meta
+	a.res.UserMeta = a.job.UserMeta
 	a.res.Tasks = nil
 	a.res.Elapsed = a.elapsed()
 	a.res.Error = e

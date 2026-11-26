@@ -8,8 +8,8 @@ import "github.com/angels-you/bee/pkg/types/code"
 // download, format and pixel size after reading the header (already with
 // EXIF rotation applied)
 type Result struct {
-	ID           any            `json:"id"`             // the job id as sent
-	Meta         map[string]any `json:"meta,omitempty"` // the job meta as sent
+	ID           any            `json:"id"`                  // the job id as sent
+	UserMeta     map[string]any `json:"user_meta,omitempty"` // the job meta as sent
 	Tasks        []TaskResult   `json:"tasks,omitempty"`
 	Elapsed      int64          `json:"elapsed"` // milliseconds for the whole job
 	SHA256       string         `json:"sha256,omitempty"`

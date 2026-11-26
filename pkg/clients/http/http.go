@@ -50,7 +50,7 @@ type Client struct {
 // GenerateAudio runs an audio job.
 func (a *Client) GenerateAudio(ctx context.Context, j audio.Job) (audio.Result, error) {
 	var res audio.Result
-	err := a.call(ctx, proto.Audio, j.ID, j.Meta, j, &res)
+	err := a.call(ctx, proto.Audio, j.ID, j.UserMeta, j, &res)
 
 	return res, err
 }
@@ -58,7 +58,7 @@ func (a *Client) GenerateAudio(ctx context.Context, j audio.Job) (audio.Result, 
 // GenerateStream runs an HLS job.
 func (a *Client) GenerateStream(ctx context.Context, j video.StreamJob) (video.Result, error) {
 	var res video.Result
-	err := a.call(ctx, proto.Stream, j.ID, j.Meta, j, &res)
+	err := a.call(ctx, proto.Stream, j.ID, j.UserMeta, j, &res)
 
 	return res, err
 }
@@ -66,7 +66,7 @@ func (a *Client) GenerateStream(ctx context.Context, j video.StreamJob) (video.R
 // GenerateVideo runs an MP4 job.
 func (a *Client) GenerateVideo(ctx context.Context, j video.VideoJob) (video.Result, error) {
 	var res video.Result
-	err := a.call(ctx, proto.Video, j.ID, j.Meta, j, &res)
+	err := a.call(ctx, proto.Video, j.ID, j.UserMeta, j, &res)
 
 	return res, err
 }
@@ -74,7 +74,7 @@ func (a *Client) GenerateVideo(ctx context.Context, j video.VideoJob) (video.Res
 // GenerateImages runs an images job.
 func (a *Client) GenerateImages(ctx context.Context, j images.Job) (images.Result, error) {
 	var res images.Result
-	err := a.call(ctx, proto.Images, j.ID, j.Meta, j, &res)
+	err := a.call(ctx, proto.Images, j.ID, j.UserMeta, j, &res)
 
 	return res, err
 }

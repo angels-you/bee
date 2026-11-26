@@ -74,7 +74,7 @@ The request lasts as long as the job and answers with the result: sizes, formats
 
 Every job needs an `id`: a string of 1..128 printable characters (any language, spaces allowed, no line breaks) or a whole number. The result returns it exactly as sent.
 
-A job may carry `meta`: any JSON object of yours, at most 16 KB. bee never reads it and returns it untouched in the result, on failure too.
+A job may carry `user_meta`: any JSON object of yours, at most 16 KB. bee never reads it and returns it untouched in the result, on failure too.
 
 Every job that arrives runs and writes over whatever lies at its output keys; choosing free keys is up to you.
 
@@ -110,13 +110,13 @@ services:
 NATS uses two subjects. Publish every job to `bee.jobs`, wrapped with its kind (`audio`, `stream`, `video` or `images`):
 
 ```json
-{"kind": "images", "job": {"id": 42, "meta": {"user": 7}, "input": "https://example.com/photo.jpg", "tasks": [...]}}
+{"kind": "images", "job": {"id": 42, "user_meta": {"user": 7}, "input": "https://example.com/photo.jpg", "tasks": [...]}}
 ```
 
 Every result comes on `bee.done`, with the kind and the job id:
 
 ```json
-{"kind": "images", "id": 42, "result": {"id": 42, "meta": {"user": 7}, "tasks": [...], "elapsed": 399}}
+{"kind": "images", "id": 42, "result": {"id": 42, "user_meta": {"user": 7}, "tasks": [...], "elapsed": 399}}
 ```
 
 The job and the result inside are the same JSON as over HTTP; a failed job has `error` in its result. Try it with the `nats` CLI:

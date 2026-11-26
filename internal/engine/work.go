@@ -210,9 +210,9 @@ func (a *work) checkMeta() *code.Error {
 	data, err := json.Marshal(a.meta)
 	switch {
 	case err != nil:
-		return code.New(code.InvalidJob, "meta is not json", nil)
+		return code.New(code.InvalidJob, "user_meta is not json", nil)
 	case len(data) > a.engine.metaLimit:
-		return code.New(code.InvalidJob, fmt.Sprintf("meta is %d bytes of json, more than %d", len(data), a.engine.metaLimit), nil)
+		return code.New(code.InvalidJob, fmt.Sprintf("user_meta is %d bytes of json, more than %d", len(data), a.engine.metaLimit), nil)
 	}
 
 	return nil

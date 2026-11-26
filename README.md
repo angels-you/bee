@@ -126,11 +126,11 @@ func main() {
 	// the worker: every images result, until Close
 	err = c.SubscribeImages(func(res images.Result) {
 		if res.Error != nil {
-			log.Println(res.ID, res.Meta, res.Error.Code, res.Error.Message)
+			log.Println(res.ID, res.UserMeta, res.Error.Code, res.Error.Message)
 			return
 		}
 		for _, t := range res.Tasks {
-			log.Println(res.ID, res.Meta, t.Output, t.Width, t.Height, t.Size)
+			log.Println(res.ID, res.UserMeta, t.Output, t.Width, t.Height, t.Size)
 		}
 	})
 	if err != nil {
@@ -140,7 +140,7 @@ func main() {
 	// send: returns once NATS has the job
 	err = c.GenerateImages(images.Job{
 		ID:    42,
-		Meta:  map[string]any{"user": 7},
+		UserMeta:  map[string]any{"user": 7},
 		Input: "https://cdn.example.com/upload/photo.heic",
 		Tasks: []images.Task{
 			{ID: "small", Output: "photos/42/small.webp", Profile: images.Profile{Format: images.Webp, Quality: 80, MaxWidth: 320}},
@@ -162,7 +162,7 @@ Runnable programs: [examples/http](examples/http/main.go), [examples/grpc](examp
 
 Every job needs an `id`: a string of 1..128 printable characters (any language, spaces allowed, no line breaks) or a whole number. In Go: `ID: 123` or `ID: "track-1"`. The result returns the id exactly as sent.
 
-Every job may carry `meta`: your own data (`map[string]any`, at most 16 KB of JSON). bee never reads it and returns it untouched in the result, on failure too.
+Every job may carry `user_meta`: your own data (`map[string]any`, at most 16 KB of JSON). bee never reads it and returns it untouched in the result, on failure too.
 
 Every job that arrives runs and writes over whatever lies at its output keys, on every transport (a NATS redelivery runs it again); choosing free keys is up to you.
 

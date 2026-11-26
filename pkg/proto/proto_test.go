@@ -98,7 +98,7 @@ func TestSubscriber(t *testing.T) {
 
 // TestEnvelopeID checks that a number id stays the same number
 func TestEnvelopeID(t *testing.T) {
-	in := `{"kind":"audio","id":9007199254740993,"result":{"id":9007199254740993,"meta":{"n":9007199254740993}}}`
+	in := `{"kind":"audio","id":9007199254740993,"result":{"id":9007199254740993,"user_meta":{"n":9007199254740993}}}`
 
 	var m Envelope
 	err := json.Unmarshal([]byte(in), &m)

@@ -59,7 +59,7 @@ curl -s -X POST localhost:8080/v1/images \
   -H 'Content-Type: application/json' \
   -d '{
     "id": "photo-1",
-    "meta": {"user": 7},
+    "user_meta": {"user": 7},
     "input": "https://example.com/photo.jpg",
     "tasks": [
       {
@@ -77,14 +77,14 @@ curl -s -X POST localhost:8080/v1/images \
 ```
 
 - `id` is required: a string of 1..128 printable characters, or a whole number. The result returns it exactly as sent.
-- `meta` is optional: your own data, at most 16 KB of JSON. bee never reads it and returns it untouched in the result.
+- `user_meta` is optional: your own data, at most 16 KB of JSON. bee never reads it and returns it untouched in the result.
 
 The request lasts as long as the job. A done job answers `200` with the result:
 
 ```json
 {
   "id": "photo-1",
-  "meta": {"user": 7},
+  "user_meta": {"user": 7},
   "tasks": [
     {"id": "small", "output": "photos/1/small.webp", "format": "webp", "width": 320, "height": 213,
      "size": 9120, "quality": 80, "sha256": "...", "elapsed": 85},
@@ -103,7 +103,7 @@ The request lasts as long as the job. A done job answers `200` with the result:
 A failed job answers an HTTP status that matches its error code (for example `400` for `INVALID_JOB`, `422` for `INVALID_AUDIO`, `503` for `INTERNAL_TEMPORARY_ERROR`) and the result with `error` set:
 
 ```json
-{"id": "photo-1", "meta": {"user": 7}, "elapsed": 210, "error": {"code": "SOURCE_UNAVAILABLE", "message": "...", "retryable": true}}
+{"id": "photo-1", "user_meta": {"user": 7}, "elapsed": 210, "error": {"code": "SOURCE_UNAVAILABLE", "message": "...", "retryable": true}}
 ```
 
 A missing or wrong token answers `401` with `{"error": {"code": "INVALID_JOB", "message": "bad or missing token", "retryable": false}}`. All codes and statuses: [errors.md](errors.md).

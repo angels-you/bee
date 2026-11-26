@@ -50,9 +50,9 @@ type audioRendition struct {
 // last → verify. A failed job returns a Result with Error and the same
 // *code.Error as the error
 func (a *Engine) Audio(ctx context.Context, j audio.Job) (audio.Result, error) {
-	r := &audioRun{work: a.newWork(proto.Audio, j.ID, j.Input, j.Meta), job: j}
+	r := &audioRun{work: a.newWork(proto.Audio, j.ID, j.Input, j.UserMeta), job: j}
 	r.res.ID = j.ID
-	r.res.Meta = j.Meta
+	r.res.UserMeta = j.UserMeta
 	r.res.Metrics = map[string]int64{}
 
 	// the meta of the caller

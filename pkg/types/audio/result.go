@@ -7,9 +7,9 @@ import "github.com/angels-you/bee/pkg/types/code"
 // here. A failed job has Error: none of its results count, whatever is
 // already in storage
 type Result struct {
-	ID      any            `json:"id"`             // the job id as sent
-	Meta    map[string]any `json:"meta,omitempty"` // the job meta as sent
-	Elapsed int64          `json:"elapsed"`        // milliseconds for the whole job
+	ID       any            `json:"id"`                  // the job id as sent
+	UserMeta map[string]any `json:"user_meta,omitempty"` // the job meta as sent
+	Elapsed  int64          `json:"elapsed"`             // milliseconds for the whole job
 
 	SHA256     string `json:"sha256,omitempty"`      // of the original
 	SourceSize int64  `json:"source_size,omitempty"` // bytes of the original

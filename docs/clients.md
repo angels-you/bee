@@ -134,12 +134,12 @@ func main() {
 	err = c.SubscribeAudio(func(res audio.Result) {
 		// a failed job
 		if res.Error != nil {
-			log.Println(res.ID, res.Meta, res.Error.Code, res.Error.Message, res.Error.Retryable)
+			log.Println(res.ID, res.UserMeta, res.Error.Code, res.Error.Message, res.Error.Retryable)
 			return
 		}
 
 		// a done job
-		log.Println(res.ID, res.Meta, res.Elapsed, len(res.Renditions))
+		log.Println(res.ID, res.UserMeta, res.Elapsed, len(res.Renditions))
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -148,7 +148,7 @@ func main() {
 	// send: returns once NATS has the job
 	err = c.GenerateAudio(audio.Job{
 		ID:     1001,
-		Meta:   map[string]any{"album": 7},
+		UserMeta:   map[string]any{"album": 7},
 		Input:  "https://cdn.example.com/upload/track.mp3",
 		Output: "tracks/1001/master.m3u8",
 		Wave:   "tracks/1001/wave.json",
@@ -235,12 +235,12 @@ Every job needs an `id`, on every transport:
 
 The result returns the id exactly as sent: a number stays a number, a big integer keeps all its digits. A result decoded by the Go clients holds a number as `json.Number`, so print it or call `.String()` instead of a type switch on `int`.
 
-## Meta
+## UserMeta
 
-Every job and every result has `Meta map[string]any` (JSON `meta`): your own data, for example a user id or a database row. bee never reads it, never logs it, and returns it untouched in the result, on failure too. At most 16 KB of JSON, else `INVALID_JOB`. Numbers in it come back as `json.Number` in Go.
+Every job and every result has `UserMeta map[string]any` (JSON `user_meta`): your own data, for example a user id or a database row. bee never reads it, never logs it, and returns it untouched in the result, on failure too. At most 16 KB of JSON, else `INVALID_JOB`. Numbers in it come back as `json.Number` in Go.
 
 ```go
-job := images.Job{ID: 42, Meta: map[string]any{"user": 7, "album": "summer"}, ...}
+job := images.Job{ID: 42, UserMeta: map[string]any{"user": 7, "album": "summer"}, ...}
 ```
 
 ## Timeouts and contexts

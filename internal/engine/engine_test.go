@@ -517,20 +517,20 @@ func TestMeta(t *testing.T) {
 	// a failure keeps id and meta
 	j := f.bench.Images("m1", "meta/1")
 	j.ID = 77
-	j.Meta = map[string]any{"user": "u1"}
+	j.UserMeta = map[string]any{"user": "u1"}
 	j.Input = f.bench.URL("missing.tif")
 
 	res, _ := f.bench.Engine.Images(ctx, j)
 	switch {
 	case res.ID != 77:
 		t.Errorf("id %v", res.ID)
-	case res.Meta["user"] != "u1":
-		t.Errorf("meta %v", res.Meta)
+	case res.UserMeta["user"] != "u1":
+		t.Errorf("meta %v", res.UserMeta)
 	}
 
 	// a meta above 16 KB of json
 	j = f.bench.Images("m2", "meta/2")
-	j.Meta = map[string]any{"big": strings.Repeat("x", 17<<10)}
+	j.UserMeta = map[string]any{"big": strings.Repeat("x", 17<<10)}
 
 	_, err := f.bench.Engine.Images(ctx, j)
 	if f.codeOf(err) != code.InvalidJob {
@@ -538,7 +538,7 @@ func TestMeta(t *testing.T) {
 	}
 
 	// json in, json out: the number id stays the same number
-	in := []byte(`{"id":9007199254740993,"meta":{"n":9007199254740993},"input":"x","tasks":[]}`)
+	in := []byte(`{"id":9007199254740993,"user_meta":{"n":9007199254740993},"input":"x","tasks":[]}`)
 	out, _ := f.bench.Engine.Do(ctx, "images", in)
 	if !strings.Contains(string(out), `"id":9007199254740993`) || !strings.Contains(string(out), `"n":9007199254740993`) {
 		t.Errorf("result %s", out)

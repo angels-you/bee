@@ -18,7 +18,7 @@ waveform, metadata and an analysis json.
 | json | type | required | meaning |
 |---|---|---|---|
 | `id` | string or number | yes | Job id: a string of 1..128 printable characters (any language, spaces allowed, no line breaks) or a whole number. Returned in the result exactly as sent. |
-| `meta` | object | no | Your own data. bee never reads it and returns it untouched in the result, on failure too. At most 16 KB of json. |
+| `user_meta` | object | no | Your own data. bee never reads it and returns it untouched in the result, on failure too. At most 16 KB of json. |
 | `input` | string | yes | Url of the original (presigned GET or any public https). Logged without its query. Scheme and host are checked at download (https only unless `BEE_ALLOW_INSECURE_SOURCE`, host in `BEE_SOURCE_HOSTS` if set). |
 | `output` | string | yes | Storage key of the master playlist. Must end in `.m3u8`. |
 | `wave` | string | no | Storage key of the waveform json. Empty: no waveform json and no `result.waveform`. |
@@ -69,7 +69,7 @@ the job still succeeds and gets a `fingerprint` warning.
 ```json
 {
   "id": 1001,
-  "meta": {"album": 7},
+  "user_meta": {"album": 7},
   "input": "https://uploads.example.com/raw/1001.wav?X-Amz-Signature=...",
   "output": "tracks/1001/master.m3u8",
   "wave": "tracks/1001/wave.json",
@@ -206,7 +206,7 @@ runs the job again and publishes its result again. See
 | json | type | meaning |
 |---|---|---|
 | `id` | string or number | Job id, exactly as sent. |
-| `meta` | object | Job `meta`, exactly as sent. |
+| `user_meta` | object | Job `user_meta`, exactly as sent. |
 | `elapsed` | int | Milliseconds for the whole job. |
 | `sha256` | string | sha256 of the original. |
 | `source_size` | int | Bytes of the original. |
@@ -248,9 +248,9 @@ is finite. Silence reports -144 dB for levels and -70 LUFS for loudness.
 `duration` (seconds analyzed), `max_seconds`.
 
 On failure, the result keeps what bee already knew: `sha256`,
-`source_size`, `meta`, `metadata`, `loudness`, `quality`, `warnings` and `metrics`.
+`source_size`, `user_meta`, `metadata`, `loudness`, `quality`, `warnings` and `metrics`.
 `renditions`, `waveform` and `size` are cleared, and nothing in the result
-counts as published. Over gRPC, a failure carries only `id`, `meta` and `error` (see
+counts as published. Over gRPC, a failure carries only `id`, `user_meta` and `error` (see
 [transports.md](transports.md#grpc)).
 
 ### Example result
@@ -260,7 +260,7 @@ counts as published. Over gRPC, a failure carries only `id`, `meta` and `error` 
 ```json
 {
   "id": 1001,
-  "meta": {"album": 7},
+  "user_meta": {"album": 7},
   "elapsed": 8423,
   "sha256": "9f2c…e1",
   "source_size": 41254012,

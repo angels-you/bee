@@ -23,9 +23,9 @@ import (
 // encrypted, without it HLS is published in the clear; it is never logged
 // and never stored
 type Job struct {
-	ID    any            `json:"id"`             // a string or a number, returned as sent
-	Meta  map[string]any `json:"meta,omitempty"` // data of the caller, returned untouched in the result
-	Input string         `json:"input"`          // url of the original
+	ID       any            `json:"id"`                  // a string or a number, returned as sent
+	UserMeta map[string]any `json:"user_meta,omitempty"` // data of the caller, returned untouched in the result
+	Input    string         `json:"input"`               // url of the original
 
 	// Output is the master playlist key (.m3u8); each rendition lives next
 	// to it in a folder named after its bitrate in kbit/s:
