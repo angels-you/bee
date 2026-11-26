@@ -10,7 +10,7 @@ import (
 // (profiles, options, limits) when the job runs
 func (a *StreamJob) Validate() *code.Error {
 	_, url := tools.URL(a.Input)
-	_, key := tools.Key(a.Output)
+	_, key := tools.Key(a.PlaylistPath)
 
 	switch {
 	case !tools.ID(a.ID):
@@ -18,7 +18,7 @@ func (a *StreamJob) Validate() *code.Error {
 	case !url:
 		return code.New(code.InvalidJob, "input is not a valid url", nil)
 	case !key:
-		return code.New(code.InvalidPath, "output must be a clean relative storage key", nil)
+		return code.New(code.InvalidPath, "playlist_path must be a clean relative storage key", nil)
 	}
 
 	return nil
@@ -29,7 +29,7 @@ func (a *StreamJob) Validate() *code.Error {
 // job runs
 func (a *VideoJob) Validate() *code.Error {
 	_, url := tools.URL(a.Input)
-	_, key := tools.Key(a.Output)
+	_, key := tools.Key(a.FilePath)
 
 	switch {
 	case !tools.ID(a.ID):
@@ -37,7 +37,7 @@ func (a *VideoJob) Validate() *code.Error {
 	case !url:
 		return code.New(code.InvalidJob, "input is not a valid url", nil)
 	case !key:
-		return code.New(code.InvalidPath, "output must be a clean relative storage key", nil)
+		return code.New(code.InvalidPath, "file_path must be a clean relative storage key", nil)
 	}
 
 	return nil

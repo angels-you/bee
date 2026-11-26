@@ -13,19 +13,19 @@ package video
 
 import "github.com/angels-you/bee/pkg/types/code"
 
-// StreamJob creates HLS VOD. Output is the final entry playlist object key.
+// StreamJob creates HLS VOD. PlaylistPath is the final entry playlist object key.
 // One rendition: a media playlist. Multiple renditions: a master playlist
 // referencing one media playlist per profile. The same playlists serve all clients.
 type StreamJob struct {
-	ID         any            `json:"id"`             // Job ID: a string or a number, returned as sent.
-	Meta       map[string]any `json:"meta,omitempty"` // Data of the caller, returned untouched in the result.
-	Input      string         `json:"input"`          // Presigned HTTPS URL of the source video.
-	Output     string         `json:"output"`         // S3 object key: video/1111/index.m3u8.
-	Options    Options        `json:"options"`
-	Profiles   []Profile      `json:"profiles"` // One or more renditions, ordered low to high.
-	HLS        HLS            `json:"hls"`
-	Thumbnails []Thumbnail    `json:"thumbnails,omitempty"` // Optional still images.
-	Preview    *Preview       `json:"preview,omitempty"`    // Optional short MP4 preview.
+	ID           any            `json:"id"`             // Job ID: a string or a number, returned as sent.
+	Meta         map[string]any `json:"meta,omitempty"` // Data of the caller, returned untouched in the result.
+	Input        string         `json:"input"`          // Presigned HTTPS URL of the source video.
+	PlaylistPath string         `json:"playlist_path"`  // Storage key of the entry playlist: video/1111/index.m3u8.
+	Options      Options        `json:"options"`
+	Profiles     []Profile      `json:"profiles"` // One or more renditions, ordered low to high.
+	HLS          HLS            `json:"hls"`
+	Thumbnails   []Thumbnail    `json:"thumbnails,omitempty"` // Optional still images.
+	Preview      *Preview       `json:"preview,omitempty"`    // Optional short MP4 preview.
 }
 
 // VideoJob creates a single progressive MP4 file, without HLS encryption.
@@ -33,7 +33,7 @@ type VideoJob struct {
 	ID         any            `json:"id"`             // Job ID: a string or a number, returned as sent.
 	Meta       map[string]any `json:"meta,omitempty"` // Data of the caller, returned untouched in the result.
 	Input      string         `json:"input"`          // Presigned HTTPS URL of the source video.
-	Output     string         `json:"output"`         // S3 object key: video/1111/video.mp4.
+	FilePath   string         `json:"file_path"`      // Storage key of the MP4: video/1111/video.mp4.
 	Options    Options        `json:"options"`
 	Profile    Profile        `json:"profile"`
 	Thumbnails []Thumbnail    `json:"thumbnails,omitempty"`
@@ -213,18 +213,19 @@ type Preview struct {
 // A failed job has Error set and no outputs: nothing of it counts,
 // whatever is already in the storage.
 type Result struct {
-	ID         any             `json:"id"`                    // The job ID as sent.
-	Meta       map[string]any  `json:"meta,omitempty"`        // The job meta as sent.
-	Elapsed    int64           `json:"elapsed"`               // Milliseconds of the whole job.
-	SHA256     string          `json:"sha256,omitempty"`      // Of the source file.
-	SourceSize int64           `json:"source_size,omitempty"` // Source bytes.
-	Output     string          `json:"output,omitempty"`      // Entry M3U8 or single MP4 object key.
-	Duration   float64         `json:"duration,omitempty"`    // Processed duration in seconds.
-	Size       int64           `json:"size,omitempty"`        // Total published bytes, including auxiliary files.
-	Profiles   []ProfileResult `json:"profiles,omitempty"`
-	Thumbnails []ImageResult   `json:"thumbnails,omitempty"`
-	Preview    *ProfileResult  `json:"preview,omitempty"`
-	Error      *code.Error     `json:"error,omitempty"` // Set only when the job failed.
+	ID           any             `json:"id"`                      // The job ID as sent.
+	Meta         map[string]any  `json:"meta,omitempty"`          // The job meta as sent.
+	Elapsed      int64           `json:"elapsed"`                 // Milliseconds of the whole job.
+	SHA256       string          `json:"sha256,omitempty"`        // Of the source file.
+	SourceSize   int64           `json:"source_size,omitempty"`   // Source bytes.
+	PlaylistPath string          `json:"playlist_path,omitempty"` // Stream: the entry playlist key, as saved.
+	FilePath     string          `json:"file_path,omitempty"`     // Video: the MP4 key, as saved.
+	Duration     float64         `json:"duration,omitempty"`      // Processed duration in seconds.
+	Size         int64           `json:"size,omitempty"`          // Total published bytes, including auxiliary files.
+	Profiles     []ProfileResult `json:"profiles,omitempty"`
+	Thumbnails   []ImageResult   `json:"thumbnails,omitempty"`
+	Preview      *ProfileResult  `json:"preview,omitempty"`
+	Error        *code.Error     `json:"error,omitempty"` // Set only when the job failed.
 }
 
 type ProfileResult struct {

@@ -300,23 +300,23 @@ func (a *Bench) Audio(id, dir string) audio.Job {
 // Stream returns a small single-variant Stream from source.mp4 at <dir>/index.m3u8
 func (a *Bench) Stream(id, dir string) video.StreamJob {
 	return video.StreamJob{
-		ID:       id,
-		Input:    a.URL("source.mp4"),
-		Output:   dir + "/index.m3u8",
-		Options:  video.VerticalOptions(),
-		Profiles: []video.Profile{{Name: "180p", Width: 180, Height: 320, FPS: 30, Preset: "ultrafast", VideoBitrate: 300}},
-		HLS:      video.HLS{SegmentDuration: 1},
+		ID:           id,
+		Input:        a.URL("source.mp4"),
+		PlaylistPath: dir + "/index.m3u8",
+		Options:      video.VerticalOptions(),
+		Profiles:     []video.Profile{{Name: "180p", Width: 180, Height: 320, FPS: 30, Preset: "ultrafast", VideoBitrate: 300}},
+		HLS:          video.HLS{SegmentDuration: 1},
 	}
 }
 
 // Video returns a small MP4 from source.mp4 at <dir>/video.mp4
 func (a *Bench) Video(id, dir string) video.VideoJob {
 	return video.VideoJob{
-		ID:      id,
-		Input:   a.URL("source.mp4"),
-		Output:  dir + "/video.mp4",
-		Options: video.VerticalOptions(),
-		Profile: video.Profile{Width: 180, Height: 320, Preset: "ultrafast", VideoBitrate: 300},
+		ID:       id,
+		Input:    a.URL("source.mp4"),
+		FilePath: dir + "/video.mp4",
+		Options:  video.VerticalOptions(),
+		Profile:  video.Profile{Width: 180, Height: 320, Preset: "ultrafast", VideoBitrate: 300},
 	}
 }
 

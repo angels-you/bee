@@ -99,7 +99,7 @@ func (a *videoCheck) checkStream(j *job.StreamJob) *code.Error {
 
 	// the output keys
 	keys := map[string]string{}
-	j.Output, e = a.key("output", j.Output, ".m3u8", keys)
+	j.PlaylistPath, e = a.key("playlist_path", j.PlaylistPath, ".m3u8", keys)
 	if e != nil {
 		return e
 	}
@@ -107,7 +107,7 @@ func (a *videoCheck) checkStream(j *job.StreamJob) *code.Error {
 	if e != nil {
 		return e
 	}
-	return a.renditionKeys(j.Output, j.Profiles, keys)
+	return a.renditionKeys(j.PlaylistPath, j.Profiles, keys)
 }
 
 // checkVideo — a Video job against the job contract and the config,
@@ -160,7 +160,7 @@ func (a *videoCheck) checkVideo(j *job.VideoJob) *code.Error {
 
 	// the output keys
 	keys := map[string]string{}
-	j.Output, e = a.key("output", j.Output, ".mp4", keys)
+	j.FilePath, e = a.key("file_path", j.FilePath, ".mp4", keys)
 	if e != nil {
 		return e
 	}

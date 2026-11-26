@@ -52,14 +52,14 @@ func main() {
 
 	// vertical 9:16 HLS with two renditions and a cover
 	job := video.StreamJob{
-		ID:         1,
-		Input:      *input,
-		Output:     "clips/1/index.m3u8",
-		Options:    video.VerticalOptions(),
-		Profiles:   video.VerticalMobile(),
-		HLS:        video.DefaultHLS(),
-		Thumbnails: []video.Thumbnail{{Output: "clips/1/cover.webp", Format: video.ImageWebP, Width: 720}},
-		Meta:       map[string]any{"clip": "first"},
+		ID:           1,
+		Input:        *input,
+		PlaylistPath: "clips/1/index.m3u8",
+		Options:      video.VerticalOptions(),
+		Profiles:     video.VerticalMobile(),
+		HLS:          video.DefaultHLS(),
+		Thumbnails:   []video.Thumbnail{{Output: "clips/1/cover.webp", Format: video.ImageWebP, Width: 720}},
+		Meta:         map[string]any{"clip": "first"},
 	}
 
 	// send and forget: the result comes to the worker

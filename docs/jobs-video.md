@@ -27,7 +27,7 @@ sizes in bytes.
 | `id` | string or number | yes | A string of 1..128 printable characters (any language, spaces allowed, no line breaks) or a whole number. Returned in the result exactly as sent. |
 | `meta` | object | no | Your own data. bee never reads it and returns it untouched in the result, on failure too. At most 16 KB of json. |
 | `input` | string | yes | Url of the source video. https only (http only with `BEE_ALLOW_INSECURE_SOURCE`). The host must be in `BEE_SOURCE_HOSTS` when that is set. |
-| `output` | string | yes | Key of the entry playlist, ending in `.m3u8`. |
+| `playlist_path` | string | yes | Key of the entry playlist, ending in `.m3u8`. |
 | `options` | Options | no | Applies to every rendition. |
 | `profiles` | Profile[] | yes, at least 1 | Renditions. Names are unique, `fps` is required, and every profile must have the aspect ratio of the first (within 1 %). |
 | `hls` | HLS | no | Packaging and encryption. |
@@ -41,7 +41,7 @@ sizes in bytes.
 | `id` | string or number | yes | As for Stream. |
 | `meta` | object | no | As for Stream. |
 | `input` | string | yes | As for Stream. |
-| `output` | string | yes | Key of the MP4, ending in `.mp4`. |
+| `file_path` | string | yes | Key of the MP4, ending in `.mp4`. |
 | `options` | Options | no | |
 | `profile` | Profile | yes | The one encoding. `name` is optional and only echoed back. `fps` 0 keeps the source rate. |
 | `thumbnails` | Thumbnail[] | no | |
@@ -152,12 +152,12 @@ encrypted, even for an encrypted Stream.
 
 ## Keys
 
-Every output key (`output`, thumbnail and preview outputs) has one leading
+Every output key (`playlist_path` or `file_path`, thumbnail and preview outputs) has one leading
 `/` trimmed. After that it must be a clean relative key: no `..`, no
 spaces, quotes, `?`, `#` or `\`. It must have the right extension, and keys
 must not repeat. With several renditions, no other key may lie in a
 rendition folder (`<dir of output>/<name>/`). With one rendition, no other
-key next to `output` may be named `init.mp4` or `segment_*`. A broken key
+key next to `playlist_path` may be named `init.mp4` or `segment_*`. A broken key
 gives `INVALID_PATH`.
 
 ## Presets (Go)
@@ -201,7 +201,7 @@ Outside Go, write the profile out. `Preset("720p")` is:
   "id": 1111,
   "meta": {"user": 7},
   "input": "https://uploads.example.com/raw/1111.mov?X-Amz-Signature=...",
-  "output": "video/1111/index.m3u8",
+  "playlist_path": "video/1111/index.m3u8",
   "options": {"vertical": true, "resize": "cover", "gravity": "center", "normalize": true},
   "profiles": [
     {"name": "360p", "width": 360, "height": 640, "fps": 30, "preset": "fast", "video_bitrate": 500, "max_bitrate": 750, "buffer_size": 1500, "crf": 0, "sound_bitrate": 96},
@@ -221,7 +221,7 @@ Outside Go, write the profile out. `Preset("720p")` is:
   "id": "clip-1112",
   "meta": {"user": 7},
   "input": "https://uploads.example.com/raw/1112.mp4?X-Amz-Signature=...",
-  "output": "video/1112/video.mp4",
+  "file_path": "video/1112/video.mp4",
   "options": {"start": 2, "duration": 30, "watermark": {"input": "https://cdn.example.com/logo.png", "margin": 24}},
   "profile": {"name": "720p", "width": 720, "height": 1280, "fps": 30, "video_bitrate": 1800, "max_bitrate": 2700, "buffer_size": 5400, "crf": 0},
   "thumbnails": [{"output": "video/1112/cover.jpg"}]
@@ -273,7 +273,7 @@ the largest remaining profile.
 
 ## Storage layout
 
-**Stream with several renditions**, for `"output": "video/1111/index.m3u8"`:
+**Stream with several renditions**, for `"playlist_path": "video/1111/index.m3u8"`:
 
 ```
 video/1111/index.m3u8                 master playlist (output)
@@ -289,11 +289,11 @@ The master lists `<name>/index.m3u8` with `BANDWIDTH` (peak) and
 `AVERAGE-BANDWIDTH`, both measured from the published segments, plus
 resolution, frame rate and codecs.
 
-**Stream with one rendition:** `output` is the media playlist itself.
+**Stream with one rendition:** `playlist_path` is the media playlist itself.
 `init.mp4` and `segment_NNNNN.*` sit next to it in the same folder, and
 there is no master.
 
-**Video:** the MP4 is at `output`.
+**Video:** the MP4 is at `file_path`.
 
 **Thumbnails and preview** are always at their own keys.
 
@@ -335,7 +335,8 @@ taken keys are your concern. A NATS redelivery runs the job again.
 | `elapsed` | int | Milliseconds of the whole job. |
 | `sha256` | string | Of the source file. |
 | `source_size` | int | Source bytes. |
-| `output` | string | Entry key (m3u8 or mp4). |
+| `playlist_path` | string | Stream: the entry playlist key, as saved. |
+| `file_path` | string | Video: the MP4 key, as saved. |
 | `duration` | number | Processed duration, seconds. |
 | `size` | int | Bytes published in total: renditions, master, thumbnails and preview. |
 | `profiles` | ProfileResult[] | Published renditions in order (skipped ones are left out). |
@@ -360,7 +361,7 @@ init and segments, or the file), `segments` (0 for MP4).
   "elapsed": 21834,
   "sha256": "5b1d…a0",
   "source_size": 48211934,
-  "output": "video/1111/index.m3u8",
+  "playlist_path": "video/1111/index.m3u8",
   "duration": 14.5,
   "size": 5127336,
   "profiles": [

@@ -35,14 +35,14 @@ func (a *fixture) init(t *testing.T) {
 // stream — a valid Stream: the mobile ladder, every optional part set.
 func (a *fixture) stream() job.StreamJob {
 	return job.StreamJob{
-		ID:         "job-1",
-		Input:      "https://bucket.s3.example.com/in/source.mov?X-Amz-Signature=secret",
-		Output:     "/video/1111/index.m3u8",
-		Options:    job.VerticalOptions(),
-		Profiles:   job.VerticalMobile(),
-		HLS:        job.DefaultHLS(),
-		Thumbnails: []job.Thumbnail{{Output: "video/1111/cover.webp", Format: job.ImageWebP}},
-		Preview:    &job.Preview{Output: "video/1111/preview.mp4", Profile: job.Profile{Width: 360, Height: 640, VideoBitrate: 400}},
+		ID:           "job-1",
+		Input:        "https://bucket.s3.example.com/in/source.mov?X-Amz-Signature=secret",
+		PlaylistPath: "/video/1111/index.m3u8",
+		Options:      job.VerticalOptions(),
+		Profiles:     job.VerticalMobile(),
+		HLS:          job.DefaultHLS(),
+		Thumbnails:   []job.Thumbnail{{Output: "video/1111/cover.webp", Format: job.ImageWebP}},
+		Preview:      &job.Preview{Output: "video/1111/preview.mp4", Profile: job.Profile{Width: 360, Height: 640, VideoBitrate: 400}},
 	}
 }
 
@@ -50,11 +50,11 @@ func (a *fixture) stream() job.StreamJob {
 func (a *fixture) video() job.VideoJob {
 	p, _ := job.Preset(job.Quality720p)
 	return job.VideoJob{
-		ID:      "job-2",
-		Input:   "https://bucket.s3.example.com/in/source.mov",
-		Output:  "video/1111/video.mp4",
-		Options: job.VerticalOptions(),
-		Profile: p,
+		ID:       "job-2",
+		Input:    "https://bucket.s3.example.com/in/source.mov",
+		FilePath: "video/1111/video.mp4",
+		Options:  job.VerticalOptions(),
+		Profile:  p,
 	}
 }
 
@@ -96,13 +96,13 @@ func TestCheckStreamDefaults(t *testing.T) {
 	f.init(t)
 
 	j := job.StreamJob{
-		ID:         "job-1",
-		Input:      "https://s3.example.com/in.mov",
-		Output:     "/video/1/index.m3u8",
-		Options:    job.Options{Sound: "https://s3.example.com/music.mp3", Watermark: &job.Watermark{Input: "https://s3.example.com/mark.png"}},
-		Profiles:   []job.Profile{{Name: "360p", Width: 360, Height: 640, FPS: 30, VideoBitrate: 500}},
-		Thumbnails: []job.Thumbnail{{Output: "video/1/cover.jpg"}},
-		Preview:    &job.Preview{Output: "video/1/preview.mp4", Profile: job.Profile{Width: 360, Height: 640, VideoBitrate: 400}},
+		ID:           "job-1",
+		Input:        "https://s3.example.com/in.mov",
+		PlaylistPath: "/video/1/index.m3u8",
+		Options:      job.Options{Sound: "https://s3.example.com/music.mp3", Watermark: &job.Watermark{Input: "https://s3.example.com/mark.png"}},
+		Profiles:     []job.Profile{{Name: "360p", Width: 360, Height: 640, FPS: 30, VideoBitrate: 500}},
+		Thumbnails:   []job.Thumbnail{{Output: "video/1/cover.jpg"}},
+		Preview:      &job.Preview{Output: "video/1/preview.mp4", Profile: job.Profile{Width: 360, Height: 640, VideoBitrate: 400}},
 	}
 	caller := j
 
@@ -169,8 +169,8 @@ func TestCheckStreamDefaults(t *testing.T) {
 		t.Errorf("preview duration %v", j.Preview.Duration)
 	case j.Preview.Profile.SoundBitrate != 128:
 		t.Errorf("preview sound bitrate %d", j.Preview.Profile.SoundBitrate)
-	case j.Output != "video/1/index.m3u8":
-		t.Errorf("output %q", j.Output)
+	case j.PlaylistPath != "video/1/index.m3u8":
+		t.Errorf("output %q", j.PlaylistPath)
 	}
 
 	// the caller's job is as it was
@@ -417,22 +417,22 @@ func TestCheckStreamRefuses(t *testing.T) {
 
 	// keys
 	j = f.stream()
-	j.Output = "video/1111/index.mp4"
-	f.refuse(j, code.InvalidPath, "output must end with .m3u8")
+	j.PlaylistPath = "video/1111/index.mp4"
+	f.refuse(j, code.InvalidPath, "playlist_path must end with .m3u8")
 	j = f.stream()
-	j.Output = "video/../index.m3u8"
+	j.PlaylistPath = "video/../index.m3u8"
 	f.refuse(j, code.InvalidPath, "clean relative")
 	j = f.stream()
-	j.Output = "//video/index.m3u8"
+	j.PlaylistPath = "//video/index.m3u8"
 	f.refuse(j, code.InvalidPath, "clean relative")
 	j = f.stream()
-	j.Output = "video/a b/index.m3u8"
+	j.PlaylistPath = "video/a b/index.m3u8"
 	f.refuse(j, code.InvalidPath, "holds a space")
 	j = f.stream()
 	j.Thumbnails[0].Output = "video/1111/cover.jpg"
 	f.refuse(j, code.InvalidPath, "must end with .webp")
 	j = f.stream()
-	j.Preview.Output = j.Output
+	j.Preview.Output = j.PlaylistPath
 	f.refuse(j, code.InvalidPath, "must end with .mp4")
 	j = f.stream()
 	j.Thumbnails = append(j.Thumbnails, j.Thumbnails[0])
@@ -465,7 +465,7 @@ func TestCheckVideo(t *testing.T) {
 	}
 
 	j = f.video()
-	j.Output = "video/1111/index.m3u8"
+	j.FilePath = "video/1111/index.m3u8"
 	f.refuseVideo(j, code.InvalidPath, "must end with .mp4")
 	j = f.video()
 	j.Profile.Height = 1300

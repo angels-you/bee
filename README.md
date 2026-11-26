@@ -84,7 +84,7 @@ defer c.Close()
 res, err := c.GenerateStream(ctx, video.StreamJob{
 	ID:       "clip-1",
 	Input:    "https://cdn.example.com/upload/clip.mov",
-	Output:   "clips/1/index.m3u8",
+	PlaylistPath: "clips/1/index.m3u8",
 	Options:  video.VerticalOptions(),
 	Profiles: video.VerticalMobile(), // 360p + 720p
 	HLS:      video.DefaultHLS(),
@@ -94,7 +94,7 @@ profile, _ := video.Preset(video.Quality720p)
 res, err = c.GenerateVideo(ctx, video.VideoJob{
 	ID:      "clip-1-mp4",
 	Input:   "https://cdn.example.com/upload/clip.mov",
-	Output:  "clips/1/video.mp4",
+	FilePath: "clips/1/video.mp4",
 	Options: video.VerticalOptions(),
 	Profile: profile,
 })

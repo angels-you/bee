@@ -69,7 +69,7 @@ func (a *Engine) Stream(ctx context.Context, j video.StreamJob) (video.Result, e
 		return r.fail(e)
 	}
 
-	r.output = j.Output
+	r.output = j.PlaylistPath
 	r.options = j.Options
 	r.profiles = j.Profiles
 	r.hls = &j.HLS
@@ -95,7 +95,7 @@ func (a *Engine) Video(ctx context.Context, j video.VideoJob) (video.Result, err
 		return r.fail(e)
 	}
 
-	r.output = j.Output
+	r.output = j.FilePath
 	r.options = j.Options
 	r.profiles = []video.Profile{j.Profile}
 	r.thumbnails = j.Thumbnails
@@ -564,9 +564,16 @@ func (a *videoRun) result() {
 	res := video.Result{
 		ID:         a.id,
 		Meta:       a.meta,
-		Output:     a.output,
 		SHA256:     a.res.SHA256,
 		SourceSize: a.res.SourceSize,
+	}
+
+	// where the entry lies: the playlist of a stream or the file of a video
+	switch a.kind {
+	case string(proto.Stream):
+		res.PlaylistPath = a.output
+	default:
+		res.FilePath = a.output
 	}
 	report := a.report
 

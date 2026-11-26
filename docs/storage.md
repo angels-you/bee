@@ -149,7 +149,7 @@ or `ceph` with `BEE_S3_ENDPOINT` and `BEE_S3_REGION` set.
 
 ## Keys
 
-Output keys come from the job (`output`, `playlist_path`, `wave_path`, ... and the
+Output keys come from the job (`playlist_path`, `file_path`, `wave_path`, ... and the
 `output` of every image task). They are keys relative to the storage root,
 not urls and not bucket names. A key must be:
 
@@ -180,8 +180,8 @@ same keys again.
 Audio and video jobs do not look at what is stored either: they write over
 whatever lies at their keys. Taken keys are the client's concern.
 
-They have an **entry object**: the master playlist (`playlist_path` of audio, `output` of
-stream) or the MP4 (`output` of video). The entry object is written
+They have an **entry object**: the master playlist (`playlist_path` of audio and
+stream) or the MP4 (`file_path` of video). The entry object is written
 **last**, after every segment and playlist, and after bee has checked that
 its own files are in storage. Whoever sees the entry sees a complete set.
 

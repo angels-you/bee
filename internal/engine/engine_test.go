@@ -219,8 +219,8 @@ func TestStream(t *testing.T) {
 	switch {
 	case err != nil:
 		t.Fatal(err)
-	case res.Output != "video/1/index.m3u8":
-		t.Errorf("output %q", res.Output)
+	case res.PlaylistPath != "video/1/index.m3u8":
+		t.Errorf("output %q", res.PlaylistPath)
 	case len(res.Profiles) != 1:
 		t.Fatalf("profiles %+v", res.Profiles)
 	case res.Profiles[0].Width != 180:
@@ -277,8 +277,8 @@ func TestVideo(t *testing.T) {
 	switch {
 	case err != nil:
 		t.Fatal(err)
-	case res.Output != "video/3/video.mp4":
-		t.Errorf("output %q", res.Output)
+	case res.FilePath != "video/3/video.mp4":
+		t.Errorf("output %q", res.FilePath)
 	case res.Size == 0:
 		t.Error("no size")
 	}

@@ -129,12 +129,12 @@ func TestEstimatedBytes(t *testing.T) {
 // result without its cause.
 func TestJSON(t *testing.T) {
 	s := StreamJob{
-		ID:       "j1",
-		Input:    "https://s3.example.com/in.mov",
-		Output:   "video/1/index.m3u8",
-		Options:  VerticalOptions(),
-		Profiles: VerticalMobile(),
-		HLS:      HLS{Key: []byte("0123456789abcdef"), KeyURI: "skd://1"},
+		ID:           "j1",
+		Input:        "https://s3.example.com/in.mov",
+		PlaylistPath: "video/1/index.m3u8",
+		Options:      VerticalOptions(),
+		Profiles:     VerticalMobile(),
+		HLS:          HLS{Key: []byte("0123456789abcdef"), KeyURI: "skd://1"},
 	}
 	js, err := json.Marshal(s)
 	if err != nil {
@@ -191,22 +191,22 @@ func TestParams(t *testing.T) {
 
 // TestValidate checks the light checks of Stream and Video
 func TestValidate(t *testing.T) {
-	s := StreamJob{ID: "s1", Input: "https://example.com/a.mov", Output: "v/1/index.m3u8"}
+	s := StreamJob{ID: "s1", Input: "https://example.com/a.mov", PlaylistPath: "v/1/index.m3u8"}
 	e := s.Validate()
 	if e != nil {
 		t.Errorf("stream: %v", e)
 	}
 
-	v := VideoJob{ID: "v1", Input: "https://example.com/a.mov", Output: "v/1/video.mp4"}
+	v := VideoJob{ID: "v1", Input: "https://example.com/a.mov", FilePath: "v/1/video.mp4"}
 	e = v.Validate()
 	if e != nil {
 		t.Errorf("video: %v", e)
 	}
 
 	bad := []VideoJob{
-		{ID: "", Input: "https://example.com/a.mov", Output: "a.mp4"},
-		{ID: "v", Input: "a.mov", Output: "a.mp4"},
-		{ID: "v", Input: "https://example.com/a.mov", Output: "a/../b.mp4"},
+		{ID: "", Input: "https://example.com/a.mov", FilePath: "a.mp4"},
+		{ID: "v", Input: "a.mov", FilePath: "a.mp4"},
+		{ID: "v", Input: "https://example.com/a.mov", FilePath: "a/../b.mp4"},
 	}
 	for i, x := range bad {
 		if x.Validate() == nil {

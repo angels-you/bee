@@ -128,8 +128,8 @@ func (a *fixture) run(c client) {
 	switch {
 	case err != nil:
 		t.Fatalf("video: %v", err)
-	case vr.Output != "e2e/video/video.mp4":
-		t.Errorf("video output %q", vr.Output)
+	case vr.FilePath != "e2e/video/video.mp4":
+		t.Errorf("video output %q", vr.FilePath)
 	}
 	a.stored("e2e/video/video.mp4")
 
@@ -441,7 +441,7 @@ func (a *fixture) check(got map[string]any) {
 
 	// video
 	vr, _ := got["3"].(video.Result)
-	if vr.Error != nil || vr.Output != "nats/video/video.mp4" {
+	if vr.Error != nil || vr.FilePath != "nats/video/video.mp4" {
 		t.Errorf("video: %+v", vr)
 	}
 	a.stored("nats/video/video.mp4")
