@@ -71,8 +71,8 @@ type Options struct {
 // encryption key and options. Result keys are cleaned in place. The url
 // scheme and host, limits and rendition folders are checked by the engine
 func (a *Job) Validate() *code.Error {
-	if a.ID == "" {
-		return code.New(code.InvalidJob, "id is required", nil)
+	if !tools.ID(a.ID) {
+		return code.New(code.InvalidJob, "id must be 1..128 characters of A-Z, a-z, 0-9, _ and -", nil)
 	}
 
 	// url of the original

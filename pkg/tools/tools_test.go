@@ -67,3 +67,25 @@ func TestSafeURL(t *testing.T) {
 		t.Errorf("safe url %q", got)
 	}
 }
+
+// TestID checks the job id rule
+func TestID(t *testing.T) {
+	good := []string{"a", "track-1", "01J9Z3K6", "550e8400-e29b-41d4-a716-446655440000", "a_b"}
+	for _, id := range good {
+		if !ID(id) {
+			t.Errorf("%q refused", id)
+		}
+	}
+
+	long := make([]byte, 129)
+	for i := range long {
+		long[i] = 'a'
+	}
+
+	bad := []string{"", "a.b", "a b", "a*", "a>", "трек", string(long)}
+	for _, id := range bad {
+		if ID(id) {
+			t.Errorf("%q accepted", id)
+		}
+	}
+}

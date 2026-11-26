@@ -75,3 +75,25 @@ func SafeURL(raw string) string {
 
 	return u.String()
 }
+
+// ID reports whether id is a valid job id: 1..128 characters of A-Z,
+// a-z, 0-9, _ and - (uuid, ulid and numbers fit). The id goes into nats
+// subjects, so every transport holds it to this rule
+func ID(id string) bool {
+	if len(id) == 0 || len(id) > 128 {
+		return false
+	}
+
+	for _, r := range id {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '_', r == '-':
+		default:
+			return false
+		}
+	}
+
+	return true
+}

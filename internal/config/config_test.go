@@ -306,10 +306,30 @@ func TestToken(t *testing.T) {
 		t.Errorf("health addr %q", c.Health.Addr)
 	}
 
-	// a bad nats name
-	f.set("BEE_NATS_NAME", "Bee.1")
-	_, err = Load()
-	if err == nil || !strings.Contains(err.Error(), "BEE_NATS_NAME") {
-		t.Errorf("bad nats name: %v", err)
+	// bad subject bases
+	bad := map[string][2]string{
+		"wildcard": {"bee.jobs.*", "bee.done"},
+		"equal":    {"bee.jobs", "bee.jobs"},
+		"inside":   {"bee.jobs", "bee.jobs.done"},
+		"empty":    {"bee..jobs", "bee.done"},
+	}
+	for name, bases := range bad {
+		f.set("BEE_NATS_JOBS", bases[0], "BEE_NATS_DONE", bases[1])
+
+		_, err = Load()
+		if err == nil || !strings.Contains(err.Error(), "BEE_NATS_JOBS") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+
+	// other valid bases
+	f.set("BEE_NATS_JOBS", "bee.hetzner.jobs", "BEE_NATS_DONE", "bee.hetzner.done")
+
+	c, err = Load()
+	switch {
+	case err != nil:
+		t.Fatal(err)
+	case c.NATS.Names().JobsStream() != "BEE_HETZNER_JOBS":
+		t.Errorf("jobs stream %s", c.NATS.Names().JobsStream())
 	}
 }

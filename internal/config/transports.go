@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/angels-you/bee/pkg/proto"
 )
 
-// HTTP receives jobs over http, serves health and metrics; empty Addr disables it
+// HTTP receives jobs over http (token required); empty Addr disables it
 type HTTP struct {
 	Addr string `env:"ADDR"` // :8080
 }
@@ -26,12 +28,16 @@ func (a *GRPC) Enabled() bool {
 	return a.Addr != ""
 }
 
-// NATS receives jobs from NATS JetStream; empty URL disables it. Name is the
-// stream, subjects and consumer name of this bee: bees with different buckets
-// on the same nats must use different names
+// NATS receives jobs from NATS JetStream; empty URL disables it. Jobs and
+// Done are the subject bases: jobs come on <jobs>.<kind>, results go to
+// <done>.<kind>.<id>; the stream, consumer and ledger names are derived
+// from them (proto.Names). Bees with the same bases share one queue; bees
+// with other buckets on the same nats need other bases
 type NATS struct {
-	URL  string `env:"URL"`  // nats://host:4222, credentials inside the url
-	Name string `env:"NAME"` // stream BEE, subjects bee.audio.new etc., consumer bee
+	URL   string `env:"URL"`   // nats://host:4222
+	Token string `env:"TOKEN"` // nats auth token; empty: none
+	Jobs  string `env:"JOBS"`  // subject base of the jobs
+	Done  string `env:"DONE"`  // subject base of the results
 
 	// AckWait is how long a delivery lives without signs of life before
 	// JetStream hands it to another bee; a running job sends progress every
@@ -53,6 +59,11 @@ type NATS struct {
 	ResultTTL time.Duration `env:"RESULT_TTL"`
 }
 
+// Names are the subjects and stream names of the bases
+func (a *NATS) Names() proto.Names {
+	return proto.Names{Jobs: a.Jobs, Done: a.Done}
+}
+
 // Enabled reports whether the transport is enabled
 func (a *NATS) Enabled() bool {
 	return a.URL != ""
@@ -60,7 +71,11 @@ func (a *NATS) Enabled() bool {
 
 // defaults are values proven in production
 func (a *NATS) defaults() {
-	a.Name = "bee"
+	// the subject bases: one public place for bee and its clients
+	names := proto.Names{}
+	a.Jobs = names.JobsBase()
+	a.Done = names.DoneBase()
+
 	a.AckWait = time.Minute
 	a.MaxDeliver = 5
 	a.RetryDelay = 10 * time.Second
@@ -73,20 +88,17 @@ func (a *NATS) defaults() {
 
 // validate checks that the enabled nats fields are within their limits
 func (a *NATS) validate() (errs []error) {
-	// the name goes into stream names and subjects: a-z, 0-9, _ and -
-	for _, r := range a.Name {
-		switch {
-		case r >= 'a' && r <= 'z':
-		case r >= '0' && r <= '9':
-		case r == '_', r == '-':
-		default:
-			errs = append(errs, fmt.Errorf("config: BEE_NATS_NAME %q may hold only a-z, 0-9, _ and -", a.Name))
-			return
+	// the subject bases: set, valid, apart
+	switch {
+	case a.Jobs == "":
+		errs = append(errs, errors.New("config: BEE_NATS_JOBS is required"))
+	case a.Done == "":
+		errs = append(errs, errors.New("config: BEE_NATS_DONE is required"))
+	default:
+		err := a.Names().Validate()
+		if err != nil {
+			errs = append(errs, fmt.Errorf("config: BEE_NATS_JOBS, BEE_NATS_DONE: %w", err))
 		}
-	}
-
-	if a.Name == "" {
-		errs = append(errs, errors.New("config: BEE_NATS_NAME is required"))
 	}
 
 	if a.AckWait <= 0 {

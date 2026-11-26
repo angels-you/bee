@@ -3,7 +3,7 @@
 // shares) and waits for its result in the results stream; the job
 // survives a restart of bee, which picks it up again.
 //
-//	c, err := nats.Dial("nats://nats:4222", "bee")
+//	c, err := nats.Dial("nats://nats:4222", os.Getenv("NATS_TOKEN"), proto.Names{})
 //	if err != nil {
 //		return err
 //	}
@@ -17,7 +17,9 @@
 //		Profile: profile,
 //	})
 //
-// The name is BEE_NATS_NAME of the bee. The context bounds the wait: a
+// proto.Names holds the subject bases of the bees (BEE_NATS_JOBS and
+// BEE_NATS_DONE); the zero value is the defaults bee.jobs.new and
+// bee.jobs.done. The context bounds the wait: a
 // job whose wait ended still runs, and its result stays in the results
 // stream for BEE_NATS_RESULT_TTL (Result reads it later). A failed job
 // returns its result with Error set and the same *code.Error.
@@ -27,6 +29,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/angels-you/bee/pkg/tools"
 
 	natsgo "github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
@@ -38,7 +41,7 @@ import (
 	"github.com/angels-you/bee/pkg/types/video"
 )
 
-// Client sends jobs to the bees of one name.
+// Client sends jobs to the bees of one pair of subject bases.
 type Client struct {
 	nc    *natsgo.Conn
 	js    jetstream.JetStream
@@ -46,15 +49,18 @@ type Client struct {
 	own   bool // the connection is the client's: Close closes it
 }
 
-// Dial connects to url for the bees of name (BEE_NATS_NAME; empty is
-// "bee").
-func Dial(url, name string, opts ...natsgo.Option) (*Client, error) {
+// Dial connects to url with token (empty: none) for the bees of names.
+func Dial(url, token string, names proto.Names, opts ...natsgo.Option) (*Client, error) {
+	if token != "" {
+		opts = append(opts, natsgo.Token(token))
+	}
+
 	nc, err := natsgo.Connect(url, opts...)
 	if err != nil {
 		return nil, err
 	}
 
-	a, err := New(nc, name)
+	a, err := New(nc, names)
 	if err != nil {
 		nc.Close()
 		return nil, err
@@ -64,14 +70,19 @@ func Dial(url, name string, opts ...natsgo.Option) (*Client, error) {
 	return a, nil
 }
 
-// New uses an open connection for the bees of name.
-func New(nc *natsgo.Conn, name string) (*Client, error) {
+// New uses an open connection for the bees of names.
+func New(nc *natsgo.Conn, names proto.Names) (*Client, error) {
+	err := names.Validate()
+	if err != nil {
+		return nil, err
+	}
+
 	js, err := jetstream.New(nc)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Client{nc: nc, js: js, names: proto.Names{Name: name}}, nil
+	return &Client{nc: nc, js: js, names: names}, nil
 }
 
 // Close closes the connection made by Dial.
@@ -116,6 +127,10 @@ func (a *Client) Images(ctx context.Context, j images.Job) (images.Result, error
 // Result waits for the latest result of job id of kind already in the
 // results stream (a job sent earlier) and reads it into res.
 func (a *Client) Result(ctx context.Context, kind proto.Kind, id string, res any) error {
+	if !tools.ID(id) {
+		return a.fail(res, id, code.New(code.InvalidJob, "id must be 1..128 characters of A-Z, a-z, 0-9, _ and -", nil))
+	}
+
 	cons, err := a.results(ctx, kind, id, jetstream.DeliverLastPolicy)
 	if err != nil {
 		return a.fail(res, id, code.New(code.InternalTemporaryError, "bee nats: results", err))
@@ -127,6 +142,11 @@ func (a *Client) Result(ctx context.Context, kind proto.Kind, id string, res any
 // call publishes job and waits for its result. The reader starts first
 // (new results only), so no result is missed and no stale one is read.
 func (a *Client) call(ctx context.Context, kind proto.Kind, id string, job, res any) error {
+	// the id is part of the result subject
+	if !tools.ID(id) {
+		return a.fail(res, id, code.New(code.InvalidJob, "id must be 1..128 characters of A-Z, a-z, 0-9, _ and -", nil))
+	}
+
 	data, err := json.Marshal(job)
 	if err != nil {
 		return a.fail(res, id, code.New(code.InvalidJob, "job json", err))
@@ -139,7 +159,7 @@ func (a *Client) call(ctx context.Context, kind proto.Kind, id string, job, res 
 	}
 
 	// the job
-	_, err = a.js.Publish(ctx, a.names.Jobs(kind), data)
+	_, err = a.js.Publish(ctx, a.names.JobsSubject(kind), data)
 	if err != nil {
 		return a.fail(res, id, code.New(code.InternalTemporaryError, "bee nats: publish", err))
 	}
@@ -149,8 +169,8 @@ func (a *Client) call(ctx context.Context, kind proto.Kind, id string, job, res 
 
 // results is an ordered consumer of the result subject of job id.
 func (a *Client) results(ctx context.Context, kind proto.Kind, id string, policy jetstream.DeliverPolicy) (jetstream.Consumer, error) {
-	return a.js.OrderedConsumer(ctx, a.names.Results(), jetstream.OrderedConsumerConfig{
-		FilterSubjects: []string{a.names.Done(kind, id)},
+	return a.js.OrderedConsumer(ctx, a.names.DoneStream(), jetstream.OrderedConsumerConfig{
+		FilterSubjects: []string{a.names.DoneSubject(kind, id)},
 		DeliverPolicy:  policy,
 	})
 }

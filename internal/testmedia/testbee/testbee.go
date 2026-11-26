@@ -362,9 +362,9 @@ func (a *Bench) Images(id, dir string) images.Job {
 }
 
 // NATS starts nats-server with JetStream on a free port and temporary
-// storage, stopped with the test; returns its url. Without nats-server in PATH
-// the test is skipped
-func NATS(t testing.TB) string {
+// storage, stopped with the test; returns its url. A token turns on token
+// auth. Without nats-server in PATH the test is skipped
+func NATS(t testing.TB, token string) string {
 	t.Helper()
 
 	bin, err := exec.LookPath("nats-server")
@@ -381,7 +381,12 @@ func NATS(t testing.TB) string {
 	lis.Close()
 
 	// server, stopped with the test
-	srv := &natsServer{cmd: exec.Command(bin, "-js", "-a", "127.0.0.1", "-p", port, "-sd", t.TempDir())}
+	args := []string{"-js", "-a", "127.0.0.1", "-p", port, "-sd", t.TempDir()}
+	if token != "" {
+		args = append(args, "--auth", token)
+	}
+
+	srv := &natsServer{cmd: exec.Command(bin, args...)}
 	srv.cmd.Stdout = &srv.out
 	srv.cmd.Stderr = &srv.out
 	err = srv.cmd.Start()
@@ -393,7 +398,7 @@ func NATS(t testing.TB) string {
 	// up when it responds
 	url := "nats://127.0.0.1:" + port
 	for range 100 {
-		nc, err := nats.Connect(url)
+		nc, err := nats.Connect(url, nats.Token(token))
 		if err == nil {
 			nc.Close()
 			return url

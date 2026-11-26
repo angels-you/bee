@@ -24,7 +24,7 @@ func TestConsumer(t *testing.T) {
 
 	// the consumer, its ledger in the engine
 	cfg := bench.Config.NATS
-	cfg.URL = testbee.NATS(t)
+	cfg.URL = testbee.NATS(t, "")
 	cfg.Storage = "memory"
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -43,11 +43,11 @@ func TestConsumer(t *testing.T) {
 	}
 	defer nc.Close()
 	js, _ := jetstream.New(nc)
-	names := proto.Names{Name: cfg.Name}
+	names := cfg.Names()
 
 	// a job
 	job, _ := json.Marshal(bench.Images("n1", "nats/1"))
-	_, err = js.Publish(ctx, names.Jobs(proto.Images), job)
+	_, err = js.Publish(ctx, names.JobsSubject(proto.Images), job)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestConsumer(t *testing.T) {
 	}
 
 	// not a job, with an id
-	_, err = js.Publish(ctx, names.Jobs(proto.Audio), []byte(`{"id":"n2","input":5}`))
+	_, err = js.Publish(ctx, names.JobsSubject(proto.Audio), []byte(`{"id":"n2","input":5}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func read(t *testing.T, js jetstream.JetStream, names proto.Names, kind proto.Ki
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
-	cons, err := js.OrderedConsumer(ctx, names.Results(), jetstream.OrderedConsumerConfig{FilterSubjects: []string{names.Done(kind, id)}})
+	cons, err := js.OrderedConsumer(ctx, names.DoneStream(), jetstream.OrderedConsumerConfig{FilterSubjects: []string{names.DoneSubject(kind, id)}})
 	if err != nil {
 		t.Fatal(err)
 	}

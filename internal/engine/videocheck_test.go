@@ -223,7 +223,10 @@ func TestCheckStreamRefuses(t *testing.T) {
 	// the job and urls
 	j = f.stream()
 	j.ID = ""
-	f.refuse(j, code.InvalidJob, "id is required")
+	f.refuse(j, code.InvalidJob, "id must be")
+	j = f.stream()
+	j.ID = "job.1"
+	f.refuse(j, code.InvalidJob, "id must be")
 	j = f.stream()
 	j.Input = "http://bucket.s3.example.com/in.mov?X-Amz-Signature=secret"
 	f.refuse(j, code.InvalidJob, "input must be https")
@@ -469,7 +472,7 @@ func TestCheckVideo(t *testing.T) {
 	f.refuseVideo(j, code.InvalidDimensions, "not 9:16")
 	j = f.video()
 	j.ID = ""
-	f.refuseVideo(j, code.InvalidJob, "id is required")
+	f.refuseVideo(j, code.InvalidJob, "id must be")
 	j = f.video()
 	j.Thumbnails = []job.Thumbnail{{Output: "video/1111/video.mp4"}}
 	f.refuseVideo(j, code.InvalidPath, "must end with .jpg")

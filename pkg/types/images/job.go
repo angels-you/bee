@@ -35,8 +35,8 @@ type Task struct {
 // host, sizes against limits are checked by the engine
 func (a *Job) Validate() *code.Error {
 	switch {
-	case a.ID == "":
-		return code.New(code.InvalidJob, "id is required", nil)
+	case !tools.ID(a.ID):
+		return code.New(code.InvalidJob, "id must be 1..128 characters of A-Z, a-z, 0-9, _ and -", nil)
 	case len(a.Tasks) == 0:
 		return code.New(code.InvalidJob, "at least one task is required", nil)
 	}

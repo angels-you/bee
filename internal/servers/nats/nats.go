@@ -1,11 +1,11 @@
-// Package nats accepts jobs from NATS JetStream. Jobs come in on
-// <name>.<kind>.new (the json of the job of kind) through one durable pull
-// consumer shared by every bee of the name, so the instances share the
-// queue; results (the json of the result) go out on
-// <name>.<kind>.done.<id hash> into the results stream, kept
-// BEE_NATS_RESULT_TTL, where a client reads the result of its job. bee
-// makes both streams, the consumer and the ledger at start. Names come
-// from proto.Names.
+// Package nats accepts jobs from NATS JetStream. The subject bases come
+// from BEE_NATS_JOBS and BEE_NATS_DONE (proto.Names): jobs come in on
+// <jobs>.<kind> (the json of the job of kind) through one durable pull
+// consumer shared by every bee of the same bases, so the instances share
+// the queue; results (the json of the result) go out on
+// <done>.<kind>.<id> into the results stream, kept BEE_NATS_RESULT_TTL,
+// where a client reads the result of its job. bee makes both streams, the
+// consumer and the ledger at start.
 //
 // A delivery ends one of three ways:
 //
@@ -20,8 +20,9 @@
 // result in the ledger right before: it gets that result again instead of
 // ALREADY_EXISTS.
 //
-// A message that is not a job is a failure (INVALID_JOB) when its id can
-// be read, else it is terminated and logged. While a job runs its message
+// A message on an unknown kind, or whose id cannot be read as a valid job
+// id, is terminated and logged; another message that is not a job is a
+// failure (INVALID_JOB) on its result subject. While a job runs its message
 // is kept alive (in progress every AckWait / 3).
 package nats
 
@@ -30,8 +31,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/angels-you/bee/pkg/tools"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
@@ -63,12 +64,18 @@ type Consumer struct {
 // streams, the consumer and the ledger, and returns the consumer, not yet
 // pulling. worker names the connection.
 func Open(ctx context.Context, cfg config.NATS, worker string, log *slog.Logger) (*Consumer, error) {
-	nc, err := nats.Connect(cfg.URL, nats.Name("bee "+worker), nats.MaxReconnects(-1))
+	// the connection, with the token when there is one
+	opts := []nats.Option{nats.Name("bee " + worker), nats.MaxReconnects(-1)}
+	if cfg.Token != "" {
+		opts = append(opts, nats.Token(cfg.Token))
+	}
+
+	nc, err := nats.Connect(cfg.URL, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("nats: connect: %w", err)
 	}
 
-	a := &Consumer{cfg: cfg, names: proto.Names{Name: cfg.Name}, log: log, nc: nc}
+	a := &Consumer{cfg: cfg, names: cfg.Names(), log: log, nc: nc}
 	err = a.setup(ctx)
 	if err != nil {
 		nc.Close()
@@ -94,7 +101,7 @@ func (a *Consumer) setup(ctx context.Context) error {
 
 	// the jobs: a work queue
 	_, err = js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
-		Name:      a.names.Stream(),
+		Name:      a.names.JobsStream(),
 		Subjects:  []string{a.names.AllJobs()},
 		Retention: jetstream.WorkQueuePolicy,
 		Storage:   storage,
@@ -102,12 +109,12 @@ func (a *Consumer) setup(ctx context.Context) error {
 		MaxAge:    a.cfg.MaxAge,
 	})
 	if err != nil {
-		return fmt.Errorf("nats: stream %s: %w", a.names.Stream(), err)
+		return fmt.Errorf("nats: stream %s of subjects %s (another stream may hold them): %w", a.names.JobsStream(), a.names.AllJobs(), err)
 	}
 
 	// the results: kept for the clients
 	_, err = js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
-		Name:      a.names.Results(),
+		Name:      a.names.DoneStream(),
 		Subjects:  []string{a.names.AllDone()},
 		Retention: jetstream.LimitsPolicy,
 		Storage:   storage,
@@ -115,19 +122,19 @@ func (a *Consumer) setup(ctx context.Context) error {
 		MaxAge:    a.cfg.ResultTTL,
 	})
 	if err != nil {
-		return fmt.Errorf("nats: stream %s: %w", a.names.Results(), err)
+		return fmt.Errorf("nats: stream %s of subjects %s (another stream may hold them): %w", a.names.DoneStream(), a.names.AllDone(), err)
 	}
 
 	// the consumer of every job subject
-	a.cons, err = js.CreateOrUpdateConsumer(ctx, a.names.Stream(), jetstream.ConsumerConfig{
-		Durable:       a.names.Durable(),
+	a.cons, err = js.CreateOrUpdateConsumer(ctx, a.names.JobsStream(), jetstream.ConsumerConfig{
+		Durable:       a.names.Consumer(),
 		FilterSubject: a.names.AllJobs(),
 		AckPolicy:     jetstream.AckExplicitPolicy,
 		AckWait:       a.cfg.AckWait,
 		MaxDeliver:    -1,
 	})
 	if err != nil {
-		return fmt.Errorf("nats: consumer %s: %w", a.names.Durable(), err)
+		return fmt.Errorf("nats: consumer %s: %w", a.names.Consumer(), err)
 	}
 
 	// the ledger
@@ -172,7 +179,7 @@ func (a *Consumer) Run(ctx context.Context, e *engine.Engine, concurrency int, s
 	defer cancel()
 
 	// pull until ctx is done
-	a.log.Info("nats: pulling", "stream", a.names.Stream(), "subjects", a.names.AllJobs(), "consumer", a.names.Durable(), "concurrency", concurrency)
+	a.log.Info("nats: pulling", "stream", a.names.JobsStream(), "subjects", a.names.AllJobs(), "consumer", a.names.Consumer(), "concurrency", concurrency)
 	for a.pull(ctx, work) {
 	}
 
@@ -266,7 +273,7 @@ func (a *Consumer) handle(work context.Context, msg jetstream.Msg) {
 	}
 
 	// the kind of the job by its subject
-	kind := a.kind(msg.Subject())
+	kind := a.names.Kind(msg.Subject())
 	if !kind.Valid() {
 		a.malformed(msg, kind, "unknown subject "+msg.Subject())
 		return
@@ -299,14 +306,6 @@ func (a *Consumer) handle(work context.Context, msg jetstream.Msg) {
 	}
 }
 
-// kind is the job kind of a subject <name>.<kind>.new.
-func (a *Consumer) kind(subject string) proto.Kind {
-	rest := strings.TrimPrefix(subject, a.names.Durable()+".")
-	kind, _, _ := strings.Cut(rest, ".")
-
-	return proto.Kind(kind)
-}
-
 // release frees the slot of a finished delivery.
 func (a *Consumer) release() {
 	<-a.slots
@@ -322,7 +321,7 @@ func (a *Consumer) malformed(msg jetstream.Msg, kind proto.Kind, cause string) {
 	err := json.Unmarshal(msg.Data(), &head)
 
 	switch {
-	case err != nil, head.ID == "", !kind.Valid():
+	case err != nil, !tools.ID(head.ID), !kind.Valid():
 		a.log.Warn("nats: not a job, terminated", "bytes", len(msg.Data()), "error", cause)
 		a.settle(msg.Term(), "term", "")
 		return
@@ -343,11 +342,18 @@ func (a *Consumer) malformed(msg jetstream.Msg, kind proto.Kind, cause string) {
 // confirm leaves the job to a redelivery: the result is never lost, at
 // worst it is published twice.
 func (a *Consumer) report(msg jetstream.Msg, kind proto.Kind, id string, res []byte, delivered uint64) {
+	// an id that cannot be a subject token has no place for its result
+	if !tools.ID(id) {
+		a.log.Warn("nats: job without a valid id, terminated", "bytes", len(msg.Data()))
+		a.settle(msg.Term(), "term", "")
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), a.cfg.AckWait)
 	defer cancel()
 
 	// the result
-	_, err := a.js.Publish(ctx, a.names.Done(kind, id), res)
+	_, err := a.js.Publish(ctx, a.names.DoneSubject(kind, id), res)
 	if err != nil {
 		a.log.Warn("nats: result not published, retry later", "job_id", id, "error", err.Error())
 		a.settle(msg.NakWithDelay(a.backoff(delivered)), "nak", id)

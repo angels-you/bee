@@ -217,7 +217,8 @@ func TestNATS(t *testing.T) {
 
 	// the consumer and its ledger
 	cfg := f.bench.Config.NATS
-	cfg.URL = testbee.NATS(t)
+	cfg.Token = "nats-token"
+	cfg.URL = testbee.NATS(t, cfg.Token)
 	cfg.Storage = "memory"
 
 	// fast redeliveries: a missing source redelivers MaxDeliver times
@@ -230,7 +231,7 @@ func TestNATS(t *testing.T) {
 	}
 	go cons.Run(f.ctx, f.engine(cons.Ledger()), 2, time.Second)
 
-	c, err := natsclient.Dial(cfg.URL, cfg.Name)
+	c, err := natsclient.Dial(cfg.URL, cfg.Token, cfg.Names())
 	if err != nil {
 		t.Fatal(err)
 	}
