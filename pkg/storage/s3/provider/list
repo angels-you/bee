@@ -1,0 +1,34 @@
+package provider
+
+
+// name=Provider type=int
+hetzner //iota=1 country{de} link{hetzner.de} title{Hetzner S3} region{hel1} regions{hel1,fsn1,nbg1} endpoint{<region>.your-objectstorage.com}
+selectel // country{ru} link{selectel.ru} title{Selectel S3} region{ru-1} regions{ru-1} endpoint{s3.storage.selcloud.ru}
+cloudflare // country{us} link{cloudflare.com} title{Cloudflare R2} region{auto} regions{auto} endpoint{<account>.r2.cloudflarestorage.com} egress{free}
+backblaze // country{us} link{backblaze.com} title{Backblaze B2} region{us-west-004} regions{us-west-001,us-west-002,us-west-004,us-east-005,eu-central-003} endpoint{s3.<region>.backblazeb2.com} egress{free via cloudflare}
+aws // go{AWS} country{us} link{aws.amazon.com} title{Amazon S3} region{us-east-1} regions{us-east-1,us-west-2,eu-central-1,eu-west-1,ap-southeast-1} endpoint{s3.<region>.amazonaws.com}
+gcs // go{GCS} country{us} link{cloud.google.com} title{Google Cloud Storage} region{auto} regions{auto} endpoint{storage.googleapis.com}
+wasabi // country{us} link{wasabi.com} title{Wasabi} region{us-east-1} regions{us-east-1,us-east-2,us-west-1,eu-central-1,eu-central-2,ap-northeast-1} endpoint{s3.<region>.wasabisys.com} egress{free fair use}
+digitalocean // go{DigitalOcean} country{us} link{digitalocean.com} title{DigitalOcean Spaces} region{nyc3} regions{nyc3,sfo3,ams3,fra1,sgp1,syd1} endpoint{<region>.digitaloceanspaces.com}
+linode // country{us} link{linode.com} title{Akamai Linode Object Storage} region{us-east-1} regions{us-east-1,us-southeast-1,eu-central-1,ap-south-1} endpoint{<region>.linodeobjects.com}
+vultr // country{us} link{vultr.com} title{Vultr Object Storage} region{ewr1} regions{ewr1,sjc1,ams1,blr1,del1,sgp1} endpoint{<region>.vultrobjects.com}
+scaleway // country{fr} link{scaleway.com} title{Scaleway Object Storage} region{fr-par} regions{fr-par,nl-ams,pl-waw} endpoint{s3.<region>.scw.cloud}
+ovh // go{OVH} country{fr} link{ovhcloud.com} title{OVHcloud Object Storage} region{gra} regions{gra,sbg,rbx,de,uk,waw,bhs} endpoint{s3.<region>.io.cloud.ovh.net}
+upcloud // go{UpCloud} country{fi} link{upcloud.com} title{UpCloud Object Storage} region{europe-1} endpoint{<account>.upcloudobjects.com}
+exoscale // country{ch} link{exoscale.com} title{Exoscale SOS} region{ch-gva-2} regions{ch-gva-2,ch-dk-2,de-fra-1,de-muc-1,at-vie-1,at-vie-2,bg-sof-1} endpoint{sos-<region>.exo.io}
+contabo // country{de} link{contabo.com} title{Contabo Object Storage} region{eu2} regions{eu2,usc1,sin1} endpoint{<region>.contabostorage.com} egress{free}
+ionos // go{IONOS} country{de} link{ionos.com} title{IONOS S3 Object Storage} region{eu-central-1} regions{eu-central-1,eu-central-2,eu-south-2} endpoint{s3.<region>.ionoscloud.com}
+ibm // go{IBM} country{us} link{ibm.com} title{IBM Cloud Object Storage} region{us-south} regions{us-south,us-east,eu-de,eu-gb,jp-tok} endpoint{s3.<region>.cloud-object-storage.appdomain.cloud}
+oracle // country{us} link{oracle.com} title{Oracle Cloud Object Storage} region{us-ashburn-1} regions{us-ashburn-1,us-phoenix-1,eu-frankfurt-1,uk-london-1} endpoint{<account>.compat.objectstorage.<region>.oraclecloud.com}
+alibaba // country{cn} link{alibabacloud.com} title{Alibaba Cloud OSS} region{oss-cn-hangzhou} regions{oss-cn-hangzhou,oss-cn-beijing,oss-cn-shanghai,oss-ap-southeast-1,oss-eu-central-1} endpoint{<region>.aliyuncs.com}
+tencent // country{cn} link{tencentcloud.com} title{Tencent Cloud COS} region{ap-guangzhou} regions{ap-guangzhou,ap-beijing,ap-shanghai,ap-singapore,eu-frankfurt} endpoint{cos.<region>.myqcloud.com}
+huawei // country{cn} link{huaweicloud.com} title{Huawei Cloud OBS} region{cn-north-4} regions{cn-north-4,cn-east-3,ap-southeast-1,eu-west-101} endpoint{obs.<region>.myhuaweicloud.com}
+yandex // country{ru} link{yandex.cloud} title{Yandex Object Storage} region{ru-central1} regions{ru-central1} endpoint{storage.yandexcloud.net}
+vk // go{VK} country{ru} link{cloud.vk.com} title{VK Cloud Object Storage} region{ru-msk} regions{ru-msk,kz-ast} endpoint{hb.<region>.vkcloud-storage.ru}
+timeweb // country{ru} link{timeweb.cloud} title{Timeweb Cloud S3} region{ru-1} regions{ru-1} endpoint{s3.timeweb.cloud}
+storj // country{us} link{storj.io} title{Storj} region{us1} regions{us1,eu1,ap1} endpoint{gateway.storjshare.io}
+idrive // go{IDrive} country{us} link{idrive.com} title{IDrive e2} egress{free}
+filebase // country{us} link{filebase.com} title{Filebase} region{us-east-1} regions{us-east-1} endpoint{s3.filebase.com}
+tebi // country{ee} link{tebi.io} title{Tebi} region{global} regions{global} endpoint{s3.tebi.io}
+minio // go{MinIO} country{us} link{min.io} title{MinIO} region{us-east-1} endpoint{localhost:9000} #hosted
+ceph // country{us} link{ceph.io} title{Ceph RGW} region{default} #hosted
