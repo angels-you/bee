@@ -1,9 +1,9 @@
-// Package nats is the Go client of bee over NATS JetStream. A call
+// Package beenats is the Go client of bee over NATS JetStream. A call
 // publishes the job on its subject (the work queue every bee of the name
 // shares) and waits for its result in the results stream; the job
 // survives a restart of bee, which picks it up again.
 //
-//	c, err := nats.Dial("nats://nats:4222", os.Getenv("NATS_TOKEN"), proto.Names{})
+//	c, err := beenats.Dial("nats://nats:4222", os.Getenv("NATS_TOKEN"), proto.Names{})
 //	if err != nil {
 //		return err
 //	}
@@ -23,7 +23,7 @@
 // job whose wait ended still runs, and its result stays in the results
 // stream for BEE_NATS_RESULT_TTL (Result reads it later). A failed job
 // returns its result with Error set and the same *code.Error.
-package nats
+package beenats
 
 import (
 	"context"
@@ -31,7 +31,7 @@ import (
 	"fmt"
 	"github.com/angels-you/bee/pkg/tools"
 
-	natsgo "github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/angels-you/bee/pkg/proto"
@@ -43,19 +43,19 @@ import (
 
 // Client sends jobs to the bees of one pair of subject bases.
 type Client struct {
-	nc    *natsgo.Conn
+	nc    *nats.Conn
 	js    jetstream.JetStream
 	names proto.Names
 	own   bool // the connection is the client's: Close closes it
 }
 
 // Dial connects to url with token (empty: none) for the bees of names.
-func Dial(url, token string, names proto.Names, opts ...natsgo.Option) (*Client, error) {
+func Dial(url, token string, names proto.Names, opts ...nats.Option) (*Client, error) {
 	if token != "" {
-		opts = append(opts, natsgo.Token(token))
+		opts = append(opts, nats.Token(token))
 	}
 
-	nc, err := natsgo.Connect(url, opts...)
+	nc, err := nats.Connect(url, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +71,7 @@ func Dial(url, token string, names proto.Names, opts ...natsgo.Option) (*Client,
 }
 
 // New uses an open connection for the bees of names.
-func New(nc *natsgo.Conn, names proto.Names) (*Client, error) {
+func New(nc *nats.Conn, names proto.Names) (*Client, error) {
 	err := names.Validate()
 	if err != nil {
 		return nil, err

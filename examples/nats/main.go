@@ -13,7 +13,7 @@ import (
 	"os"
 	"time"
 
-	beenats "github.com/angels-you/bee/pkg/clients/nats"
+	"github.com/angels-you/bee/pkg/clients/nats"
 	"github.com/angels-you/bee/pkg/proto"
 	"github.com/angels-you/bee/pkg/types/code"
 	"github.com/angels-you/bee/pkg/types/video"

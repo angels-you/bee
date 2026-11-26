@@ -1,8 +1,8 @@
-// Package http is the Go client of bee over HTTP/JSON. One call is one
+// Package beehttp is the Go client of bee over HTTP/JSON. One call is one
 // job: it lasts as long as the job, so the context (or HTTP.Timeout) must
 // allow the job timeout of bee.
 //
-//	c := &http.Client{URL: "http://bee:8080", Token: os.Getenv("BEE_TOKEN")}
+//	c := &beehttp.Client{URL: "http://bee:8080", Token: os.Getenv("BEE_TOKEN")}
 //
 //	res, err := c.Images(ctx, images.Job{
 //		ID:    "photo-1",
@@ -19,7 +19,7 @@
 //
 // A failed job returns its result with Error set and the same *code.Error
 // as the error; a transport failure is INTERNAL_TEMPORARY_ERROR.
-package http
+package beehttp
 
 import (
 	"bytes"
@@ -27,7 +27,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	nethttp "net/http"
+	"net/http"
 	"strings"
 
 	"github.com/angels-you/bee/pkg/proto"
@@ -41,7 +41,7 @@ import (
 type Client struct {
 	URL   string // http://bee:8080
 	Token string // BEE_TOKEN
-	HTTP  *nethttp.Client
+	HTTP  *http.Client
 
 	names proto.Names
 }
@@ -88,7 +88,7 @@ func (a *Client) call(ctx context.Context, kind proto.Kind, id string, job, res 
 	}
 
 	url := strings.TrimRight(a.URL, "/") + a.names.Path(kind)
-	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return a.fail(res, id, code.New(code.InvalidJob, "request", err))
 	}
@@ -117,7 +117,7 @@ func (a *Client) call(ctx context.Context, kind proto.Kind, id string, job, res 
 	case e != nil:
 		proto.Failure(res, id, e)
 		return e
-	case resp.StatusCode != nethttp.StatusOK:
+	case resp.StatusCode != http.StatusOK:
 		return a.fail(res, id, code.New(code.InternalTemporaryError, fmt.Sprintf("bee http %d", resp.StatusCode), nil))
 	}
 
@@ -131,9 +131,9 @@ func (a *Client) fail(res any, id string, e *code.Error) error {
 }
 
 // client is HTTP or the default client.
-func (a *Client) client() *nethttp.Client {
+func (a *Client) client() *http.Client {
 	if a.HTTP == nil {
-		return nethttp.DefaultClient
+		return http.DefaultClient
 	}
 
 	return a.HTTP

@@ -12,7 +12,7 @@ import (
 	"os"
 	"time"
 
-	beegrpc "github.com/angels-you/bee/pkg/clients/grpc"
+	"github.com/angels-you/bee/pkg/clients/grpc"
 	"github.com/angels-you/bee/pkg/types/audio"
 	"github.com/angels-you/bee/pkg/types/code"
 )

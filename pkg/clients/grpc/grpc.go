@@ -1,7 +1,7 @@
-// Package grpc is the Go client of bee over gRPC. One connection is
+// Package beegrpc is the Go client of bee over gRPC. One connection is
 // reused by every call; one call is one job.
 //
-//	c, err := grpc.Dial("bee:9090", false, os.Getenv("BEE_TOKEN"))
+//	c, err := beegrpc.Dial("bee:9090", false, os.Getenv("BEE_TOKEN"))
 //	if err != nil {
 //		return err
 //	}
@@ -16,14 +16,14 @@
 //
 // A failed job returns its result with Error set and the same *code.Error
 // as the error, rebuilt from the status and its trailers.
-package grpc
+package beegrpc
 
 import (
 	"context"
 	"encoding/json"
 	"strings"
 
-	ggrpc "google.golang.org/grpc"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -39,7 +39,7 @@ import (
 
 // Client calls one bee over gRPC.
 type Client struct {
-	conn  *ggrpc.ClientConn
+	conn  *grpc.ClientConn
 	api   proto.BeeClient
 	token string
 	names proto.Names
@@ -47,14 +47,14 @@ type Client struct {
 
 // Dial connects to addr "host:port"; tls false for a bee in the same
 // network, true behind a TLS proxy. token is BEE_TOKEN.
-func Dial(addr string, tls bool, token string, opts ...ggrpc.DialOption) (*Client, error) {
+func Dial(addr string, tls bool, token string, opts ...grpc.DialOption) (*Client, error) {
 	creds := insecure.NewCredentials()
 	if tls {
 		creds = credentials.NewTLS(nil)
 	}
 
-	opts = append(opts, ggrpc.WithTransportCredentials(creds))
-	conn, err := ggrpc.NewClient(addr, opts...)
+	opts = append(opts, grpc.WithTransportCredentials(creds))
+	conn, err := grpc.NewClient(addr, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func (a *Client) call(ctx context.Context, kind proto.Kind, id string, job, res 
 
 	// the call
 	var trailer metadata.MD
-	out, err := a.invoke(ctx, kind, &proto.Job{Json: data}, ggrpc.Trailer(&trailer))
+	out, err := a.invoke(ctx, kind, &proto.Job{Json: data}, grpc.Trailer(&trailer))
 	if err != nil {
 		return a.fail(res, id, a.error(err, trailer))
 	}
@@ -128,7 +128,7 @@ func (a *Client) call(ctx context.Context, kind proto.Kind, id string, job, res 
 }
 
 // invoke calls the method of kind.
-func (a *Client) invoke(ctx context.Context, kind proto.Kind, in *proto.Job, opts ...ggrpc.CallOption) (*proto.Result, error) {
+func (a *Client) invoke(ctx context.Context, kind proto.Kind, in *proto.Job, opts ...grpc.CallOption) (*proto.Result, error) {
 	switch kind {
 	case proto.Audio:
 		return a.api.Audio(ctx, in, opts...)

@@ -12,7 +12,7 @@ import (
 	"os"
 	"time"
 
-	beehttp "github.com/angels-you/bee/pkg/clients/http"
+	"github.com/angels-you/bee/pkg/clients/http"
 	"github.com/angels-you/bee/pkg/types/code"
 	"github.com/angels-you/bee/pkg/types/images"
 )

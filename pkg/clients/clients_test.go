@@ -16,9 +16,9 @@ import (
 	httpserver "github.com/angels-you/bee/internal/servers/http"
 	natsserver "github.com/angels-you/bee/internal/servers/nats"
 	"github.com/angels-you/bee/internal/testmedia/testbee"
-	grpcclient "github.com/angels-you/bee/pkg/clients/grpc"
-	httpclient "github.com/angels-you/bee/pkg/clients/http"
-	natsclient "github.com/angels-you/bee/pkg/clients/nats"
+	"github.com/angels-you/bee/pkg/clients/grpc"
+	"github.com/angels-you/bee/pkg/clients/http"
+	"github.com/angels-you/bee/pkg/clients/nats"
 	"github.com/angels-you/bee/pkg/storage/local"
 	"github.com/angels-you/bee/pkg/types/audio"
 	"github.com/angels-you/bee/pkg/types/code"
@@ -169,7 +169,7 @@ func TestHTTP(t *testing.T) {
 	srv := &httpserver.Server{Engine: f.engine(), Token: "test-token", Timeout: time.Minute}
 	go srv.Serve(f.ctx, lis, time.Second)
 
-	c := &httpclient.Client{URL: "http://" + lis.Addr().String(), Token: "test-token"}
+	c := &beehttp.Client{URL: "http://" + lis.Addr().String(), Token: "test-token"}
 	f.run(c)
 
 	// a wrong token
@@ -189,7 +189,7 @@ func TestGRPC(t *testing.T) {
 	srv := &grpcserver.Server{Engine: f.engine(), Token: "test-token"}
 	go srv.Serve(f.ctx, lis, time.Second)
 
-	c, err := grpcclient.Dial(lis.Addr().String(), false, "test-token")
+	c, err := beegrpc.Dial(lis.Addr().String(), false, "test-token")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +197,7 @@ func TestGRPC(t *testing.T) {
 	f.run(c)
 
 	// a wrong token
-	wrong, err := grpcclient.Dial(lis.Addr().String(), false, "wrong")
+	wrong, err := beegrpc.Dial(lis.Addr().String(), false, "wrong")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +231,7 @@ func TestNATS(t *testing.T) {
 	}
 	go cons.Run(f.ctx, f.engine(), 2, time.Second)
 
-	c, err := natsclient.Dial(cfg.URL, cfg.Token, cfg.Names())
+	c, err := beenats.Dial(cfg.URL, cfg.Token, cfg.Names())
 	if err != nil {
 		t.Fatal(err)
 	}
