@@ -23,16 +23,17 @@ set, `BEE_TOKEN` is required; without it bee does not start.
 bee serves HTTP and gRPC **without TLS**. The token travels in clear text
 unless you put bee in a private network or behind a TLS terminator (a
 reverse proxy, a load balancer, a service mesh). The Go gRPC client can
-dial with TLS (`grpc.Dial(addr, true, token)`) when such a terminator is in
+dial with TLS (`beegrpc.Dial(addr, true, token)`) when such a terminator is in
 front. See [clients.md](clients.md).
 
 An HTTP job body is limited to 1 MiB.
 
 ### NATS: BEE_NATS_TOKEN
 
-NATS does not use `BEE_TOKEN`. Anyone who can publish to the job subjects
-(`<BEE_NATS_JOBS>.<kind>`) can make bee work, and anyone who can read the
-result subjects can read results. Protect NATS itself:
+NATS does not use `BEE_TOKEN`. Anyone who can publish to the job subject
+(`BEE_NATS_JOBS`, default `bee.jobs`) can make bee work, and anyone who can
+read the result subject (`BEE_NATS_DONE`, default `bee.done`) or the
+stream `BEE_DONE` can read every result, with its `meta`. Protect NATS itself:
 
 - `BEE_NATS_TOKEN` is passed to the server as the NATS auth token; empty
   means no auth.
@@ -102,6 +103,13 @@ quotes it in errors that go back to the client: urls in logs are cut to
 scheme, host and path, and the cause of a download error has its url cut
 the same way. Error causes (`Err`) are never sent to clients at all; only
 `code` and `message` are.
+
+### Job meta is not logged
+
+The `meta` of a job is your data: bee never reads it, never logs it, and
+only returns it in the result. It is limited to 16 KB of json. Anyone who
+can read the results (the HTTP or gRPC caller, or the NATS done stream)
+sees it, so keep secrets out of it.
 
 ## HLS encryption
 

@@ -31,10 +31,10 @@ In json:
   only logged. It is never sent to clients.
 
 A failed job answers the **result** of its type (`audio.Result`,
-`video.Result`, `images.Result`) with `id` and `error` set and no outputs:
+`video.Result`, `images.Result`) with `id`, `meta` and `error` set and no outputs:
 
 ```json
-{"id": "track-1", "error": {"code": "INVALID_AUDIO", "message": "the audio has no audio stream", "retryable": false}}
+{"id": "track-1", "meta": {"album": 7}, "error": {"code": "INVALID_AUDIO", "message": "the audio has no audio stream", "retryable": false}}
 ```
 
 None of the outputs of a failed job count, even if some objects were
@@ -118,9 +118,10 @@ A bad or missing token is `Unauthenticated` without the bee trailers.
 
 ### NATS
 
-The result json, with `error` on failure, is published to
-`<BEE_NATS_DONE>.<kind>.<id>`. What happens to a failed delivery depends on
-the code:
+The result json, with `error` on failure, is published on the done
+subject (`BEE_NATS_DONE`, default `bee.done`) inside an envelope
+`{"kind":"...","id":<the job id as sent>,"result":{...}}`. What happens to a failed
+delivery depends on the code:
 
 | Case | What bee does |
 |---|---|
@@ -129,12 +130,14 @@ the code:
 | Code with redeliver on the last delivery (`BEE_NATS_MAX_DELIVER`) | Publishes the failure, then acks. Final. |
 | Code without redeliver | Publishes the failure, then acks. Final. |
 | bee is stopping and the job did not finish | Publishes nothing, naks at once: another bee takes it. |
-| The message is not a valid job but its `id` can be read | Publishes `INVALID_JOB`, acks. |
-| The message has no valid `id` | Terminated and logged; nothing is published (there is no subject for it). |
-| The subject is not `<BEE_NATS_JOBS>.<kind>` of a known kind | Terminated and logged; nothing is published. |
+| The job has a valid `id` but is not valid otherwise (also `meta` over 16 KB) | Publishes `INVALID_JOB` (or another invalid code), acks. |
+| The job has no `id`, or an id that breaks the rule | Terminated and logged; nothing is published (there is no id to report to). |
+| The message is not a json envelope, or its `kind` is unknown | Terminated and logged; nothing is published. |
 
-A job id must be 1..128 characters of `A-Z a-z 0-9 _ -`; it is part of the
-result subject.
+A job id must be a string of 1..128 printable characters (any language,
+spaces allowed, no line breaks or control characters) or a whole number,
+on every transport. `null`, `true`/`false`, objects, arrays and `""` are
+`INVALID_JOB`. A job `meta` above 16 KB of json is `INVALID_JOB` too.
 
 bee never checks whether output keys are taken: a job writes over them. A
 redelivered job runs again and publishes its result again (see
@@ -142,12 +145,12 @@ redelivered job runs again and publishes its result again (see
 
 ## Go clients
 
-The Go clients in `pkg/clients` ([clients.md](clients.md)) return the same
-thing on every transport: the result with `Error` set **and** the same
+The HTTP and gRPC Go clients in `pkg/clients` ([clients.md](clients.md))
+return the same thing: the result with `Error` set **and** the same
 `*code.Error` as the `error`.
 
 ```go
-res, err := client.Audio(ctx, job)
+res, err := client.GenerateAudio(ctx, job)
 if err != nil {
 	e := code.As(err)
 	switch {
@@ -161,11 +164,16 @@ if err != nil {
 }
 ```
 
-Failures the client sees itself (bee unreachable, a broken answer, no
-result in time on NATS) are `INTERNAL_TEMPORARY_ERROR`, retryable. A job
-the client cannot send (not json, an invalid id on NATS) and a rejected
-token are `INVALID_JOB`. The gRPC client rebuilds the bee code from the
-trailers.
+Failures the HTTP and gRPC clients see themselves (bee unreachable, a
+broken answer) are `INTERNAL_TEMPORARY_ERROR`, retryable. A job the client
+cannot send (not json, an invalid id) and a rejected token are
+`INVALID_JOB`. The gRPC client rebuilds the bee code from the trailers.
+
+The NATS client only sends: `GenerateAudio`, `GenerateStream`,
+`GenerateVideo` and `GenerateImages` return a `*code.Error` for a job that
+is not valid, or a NATS error. The failure of the job comes later to your
+handler of `SubscribeAudio` (and the others) with `res.Error` set
+([clients.md](clients.md#nats)).
 
 `code.As(err)` turns any error into a `*code.Error`: a typed one as is
 (also wrapped), a context deadline or cancel as `INTERNAL_TEMPORARY_ERROR`.

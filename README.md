@@ -48,14 +48,16 @@ Next: [docs/getting-started.md](docs/getting-started.md).
 go get github.com/angels-you/bee
 ```
 
-Every client has the same four methods: `Audio`, `Stream`, `Video`, `Images`. A call returns when the job is done. Output keys are keys in the bee storage, chosen by you.
+Every client has the same four methods: `GenerateAudio`, `GenerateStream` (HLS), `GenerateVideo` (one MP4) and `GenerateImages`. With HTTP and gRPC a call returns the result when the job is done. With NATS a call only sends the job, and a worker of yours gets the results with `SubscribeAudio`, `SubscribeStream`, `SubscribeVideo` or `SubscribeImages`. Output keys are keys in the bee storage, chosen by you.
 
-**Audio**: HLS renditions and a waveform.
+**Audio** over HTTP: HLS renditions and a waveform.
 
 ```go
-c := &http.Client{URL: "http://bee:8080", Token: os.Getenv("BEE_TOKEN")} // pkg/clients/http
+import "github.com/angels-you/bee/pkg/clients/http"
 
-res, err := c.Audio(ctx, audio.Job{
+c := &beehttp.Client{URL: "http://bee:8080", Token: os.Getenv("BEE_TOKEN")}
+
+res, err := c.GenerateAudio(ctx, audio.Job{
 	ID:     "track-1",
 	Input:  "https://cdn.example.com/upload/track.mp3",
 	Output: "tracks/1/master.m3u8",
@@ -68,16 +70,18 @@ if err != nil {
 fmt.Println(res.Renditions, res.Loudness)
 ```
 
-**Video**: HLS stream (`Stream`) or one MP4 (`Video`).
+**Video** over gRPC: HLS stream (`GenerateStream`) or one MP4 (`GenerateVideo`).
 
 ```go
-c, err := grpc.Dial("bee:9090", false, os.Getenv("BEE_TOKEN")) // pkg/clients/grpc
+import "github.com/angels-you/bee/pkg/clients/grpc"
+
+c, err := beegrpc.Dial("bee:9090", false, os.Getenv("BEE_TOKEN"))
 if err != nil {
 	return err
 }
 defer c.Close()
 
-res, err := c.Stream(ctx, video.Stream{
+res, err := c.GenerateStream(ctx, video.StreamJob{
 	ID:       "clip-1",
 	Input:    "https://cdn.example.com/upload/clip.mov",
 	Output:   "clips/1/index.m3u8",
@@ -87,7 +91,7 @@ res, err := c.Stream(ctx, video.Stream{
 })
 
 profile, _ := video.Preset(video.Quality720p)
-res, err = c.Video(ctx, video.Video{
+res, err = c.GenerateVideo(ctx, video.VideoJob{
 	ID:      "clip-1-mp4",
 	Input:   "https://cdn.example.com/upload/clip.mov",
 	Output:  "clips/1/video.mp4",
@@ -96,41 +100,104 @@ res, err = c.Video(ctx, video.Video{
 })
 ```
 
-**Images**: several results from one original.
+**Images** over NATS: send and forget, the results come to a worker of yours.
 
 ```go
-c, err := nats.Dial("nats://nats:4222", "", proto.Names{}) // pkg/clients/nats
-if err != nil {
-	return err
-}
-defer c.Close()
+package main
 
-res, err := c.Images(ctx, images.Job{
-	ID:    "photo-1",
-	Input: "https://cdn.example.com/upload/photo.heic",
-	Tasks: []images.Task{
-		{ID: "small", Output: "photos/1/small.webp", Profile: images.Profile{Format: images.Webp, Quality: 80, MaxWidth: 320}},
-		{ID: "large", Output: "photos/1/large.avif", Profile: images.Profile{Format: images.Avif, Quality: 60, MaxWidth: 1600}},
-	},
-})
-for _, t := range res.Tasks {
-	fmt.Println(t.Output, t.Width, t.Height, t.Size)
+import (
+	"log"
+	"os"
+	"os/signal"
+
+	"github.com/angels-you/bee/pkg/clients/nats"
+	"github.com/angels-you/bee/pkg/proto"
+	"github.com/angels-you/bee/pkg/types/images"
+)
+
+func main() {
+	// subjects bee.jobs and bee.done
+	c, err := beenats.Dial("nats://nats:4222", "", proto.Names{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer c.Close()
+
+	// the worker: every images result, until Close
+	err = c.SubscribeImages(func(res images.Result) {
+		if res.Error != nil {
+			log.Println(res.ID, res.Meta, res.Error.Code, res.Error.Message)
+			return
+		}
+		for _, t := range res.Tasks {
+			log.Println(res.ID, res.Meta, t.Output, t.Width, t.Height, t.Size)
+		}
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// send: returns once NATS has the job
+	err = c.GenerateImages(images.Job{
+		ID:    42,
+		Meta:  map[string]any{"user": 7},
+		Input: "https://cdn.example.com/upload/photo.heic",
+		Tasks: []images.Task{
+			{ID: "small", Output: "photos/42/small.webp", Profile: images.Profile{Format: images.Webp, Quality: 80, MaxWidth: 320}},
+			{ID: "large", Output: "photos/42/large.avif", Profile: images.Profile{Format: images.Avif, Quality: 60, MaxWidth: 1600}},
+		},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// keep the worker running until ctrl+c
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt)
+	<-stop
 }
 ```
 
 Runnable programs: [examples/http](examples/http/main.go), [examples/grpc](examples/grpc/main.go), [examples/nats](examples/nats/main.go).
 
-Job ids are 1..128 characters of `A-Z a-z 0-9 _ -`. Every job that arrives runs and writes over whatever lies at its output keys, on every transport (a NATS redelivery runs it again); choosing free keys is up to you.
+Every job needs an `id`: a string of 1..128 printable characters (any language, spaces allowed, no line breaks) or a whole number. In Go: `ID: 123` or `ID: "track-1"`. The result returns the id exactly as sent.
+
+Every job may carry `meta`: your own data (`map[string]any`, at most 16 KB of JSON). bee never reads it and returns it untouched in the result, on failure too.
+
+Every job that arrives runs and writes over whatever lies at its output keys, on every transport (a NATS redelivery runs it again); choosing free keys is up to you.
 
 ## Transports
 
-| Transport | Turn on with | Auth | Endpoint |
-|---|---|---|---|
-| HTTP | `BEE_HTTP_ADDR=:8080` | `BEE_TOKEN`, header `Authorization: Bearer <token>` | `POST /v1/audio`, `/v1/stream`, `/v1/video`, `/v1/images` |
-| gRPC | `BEE_GRPC_ADDR=:9090` | `BEE_TOKEN`, metadata `authorization: Bearer <token>` | service `bee.v1.Bee`: `Audio`, `Stream`, `Video`, `Images` |
-| NATS JetStream | `BEE_NATS_URL=nats://nats:4222` | no `BEE_TOKEN`; optional `BEE_NATS_TOKEN` for the nats server | jobs on `<BEE_NATS_JOBS>.<kind>`, results on `<BEE_NATS_DONE>.<kind>.<id>` (defaults `bee.jobs.new`, `bee.jobs.done`) |
+**HTTP**
 
-The job and the result are the same JSON on every transport. gRPC carries that JSON inside `Job{json}` / `Result{json}` messages; typed proto messages are postponed. Health, readiness and Prometheus metrics are always on `BEE_HEALTH_ADDR` (`:8081`), without a token. Details: [docs/transports.md](docs/transports.md).
+```sh
+BEE_HTTP_ADDR=:8080     # turns HTTP on
+BEE_TOKEN=change-me     # header "Authorization: Bearer <token>"
+```
+
+Jobs: `POST /v1/audio`, `/v1/stream`, `/v1/video`, `/v1/images`. The answer is the result.
+
+**gRPC**
+
+```sh
+BEE_GRPC_ADDR=:9090     # turns gRPC on
+BEE_TOKEN=change-me     # metadata "authorization: Bearer <token>"
+```
+
+Service `bee.v1.Bee` with the RPC methods `Audio`, `Stream`, `Video`, `Images`. The answer is the result. gRPC carries the job JSON inside `Job{json}` and the result JSON inside `Result{json}`; typed proto messages are postponed.
+
+**NATS JetStream**
+
+```sh
+BEE_NATS_URL=nats://nats:4222   # turns NATS on (BEE_TOKEN is not used)
+BEE_NATS_TOKEN=                 # optional: token of the NATS server
+BEE_NATS_JOBS=bee.jobs          # every job is published here
+BEE_NATS_DONE=bee.done          # every result is published here
+```
+
+A job is `{"kind":"images","job":{...}}` on `bee.jobs`; its result comes as `{"kind":"images","id":42,"result":{...}}` on `bee.done`.
+
+The job and the result are the same JSON on every transport. Health, readiness and Prometheus metrics are always on `BEE_HEALTH_ADDR` (`:8081`), without a token. Details: [docs/transports.md](docs/transports.md).
 
 ## Documentation
 

@@ -5,7 +5,7 @@ to **one** storage. One bee is connected to exactly one storage: a local
 folder or one S3 bucket, chosen by `BEE_STORAGE`. A job never names a
 bucket, an endpoint or credentials; it names only **keys** inside the
 storage of the bee it is sent to. To write to two buckets, run two bees
-(on NATS, with different subject bases, see [configuration.md](configuration.md#nats)).
+(on NATS, with different subjects, see [configuration.md](configuration.md#nats)).
 
 The code is in [`pkg/storage`](../pkg/storage): the `Storage` interface,
 `local`, `s3` and the source downloader.
@@ -149,7 +149,7 @@ or `ceph` with `BEE_S3_ENDPOINT` and `BEE_S3_REGION` set.
 
 ## Keys
 
-Output keys come from the job (`output`, `wave`, `meta`, ... and the
+Output keys come from the job (`output`, `wave`, `metadata`, ... and the
 `output` of every image task). They are keys relative to the storage root,
 not urls and not bucket names. A key must be:
 

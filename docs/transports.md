@@ -6,18 +6,31 @@ job slots (`BEE_CONCURRENCY`) and one storage. This page describes the
 protocol for clients that do not use the Go packages in `pkg/clients` (see
 [clients.md](clients.md)).
 
-On every transport, a job is the json of its type, and so is the answer:
+On every transport, a job is the json of its type, and so is the result
+(on NATS both are wrapped in an [envelope](#the-message-one-envelope-both-ways)):
 
 | kind | job json | result json | page |
 |---|---|---|---|
 | `audio` | `audio.Job` | `audio.Result` | [jobs-audio.md](jobs-audio.md) |
-| `stream` | `video.Stream` | `video.Result` | [jobs-video.md](jobs-video.md) |
-| `video` | `video.Video` | `video.Result` | [jobs-video.md](jobs-video.md) |
+| `stream` | `video.StreamJob` | `video.Result` | [jobs-video.md](jobs-video.md) |
+| `video` | `video.VideoJob` | `video.Result` | [jobs-video.md](jobs-video.md) |
 | `images` | `images.Job` | `images.Result` | [jobs-images.md](jobs-images.md) |
 
-**Job id rule.** On every transport, a job `id` is 1..128 characters of
-`A-Z a-z 0-9 _ -` (uuid, ulid and numbers fit). Bee holds every transport
-to this rule because NATS puts the id in a subject.
+**Job id rule.** On every transport, a job needs an `id`:
+
+- a string of 1..128 printable characters: letters of any language,
+  digits, punctuation and spaces are fine (uuid, ulid, `фото 1`); line
+  breaks and other control characters are not;
+- or a whole number (`42`, or a big integer of any length).
+
+`null`, `true`/`false`, objects, arrays and `""` are `INVALID_JOB`. The
+result returns the id exactly as sent: a number stays a number, a big
+integer keeps all its digits.
+
+**Meta.** Every job may carry `meta`: a json object of yours (a user id, a
+row id, anything). bee never reads it, never logs it, and returns it
+untouched in the result, on failure too. At most 16 KB of json, else
+`INVALID_JOB`.
 
 **Failures.** A failed job has `"error": {"code", "message", "retryable"}`
 in its result. `retryable` tells whether the same work can succeed later.
@@ -117,8 +130,9 @@ Typed protobuf messages are postponed. Calls are unary and synchronous.
 - `bee-error-code`: the bee code, e.g. `NO_RENDITION`
 - `bee-retryable`: `true` or `false`
 
-Over gRPC, a failed job's partial result (for example audio `meta`) is not
-returned. Use HTTP or NATS if you need it.
+Over gRPC, a failed job has no result body: the Go client fills `id`,
+`meta` (from the job it sent) and `error`. Partial data, for example audio
+`metadata`, comes only over HTTP and NATS.
 
 | gRPC code | bee codes |
 |---|---|
@@ -141,52 +155,175 @@ grpcurl -plaintext -proto pkg/proto/bee.proto \
 
 ## NATS JetStream
 
-Enabled by `BEE_NATS_URL` (e.g. `nats://nats:4222`). The NATS server must
-have JetStream on.
+NATS works as **send and forget**: you publish a job and go on; bee does
+it and publishes the result; a worker of yours reads the results. The NATS
+server must have JetStream on (`nats-server -js`).
 
-| env | default | meaning |
-|---|---|---|
-| `BEE_NATS_URL` | — | Server url. Empty turns NATS off. |
-| `BEE_NATS_TOKEN` | — | Auth token. Empty means none. |
-| `BEE_NATS_JOBS` | `bee.jobs.new` | Subject base of jobs. |
-| `BEE_NATS_DONE` | `bee.jobs.done` | Subject base of results. |
-| `BEE_NATS_ACK_WAIT` | `1m` | A delivery with no sign of life for this long goes to another bee. |
-| `BEE_NATS_MAX_DELIVER` | `5` | Deliveries of one job. The error of the last one is final. |
-| `BEE_NATS_RETRY_DELAY` | `10s` | Nak delay after the first delivery. Doubles after each. |
-| `BEE_NATS_RETRY_MAX_DELAY` | `5m` | Longest nak delay. |
-| `BEE_NATS_STORAGE` | `file` | `file` or `memory`, for the streams. |
-| `BEE_NATS_REPLICAS` | `1` | 1..5. |
-| `BEE_NATS_MAX_AGE` | `0s` | An unprocessed job is deleted after this long. 0 means never. |
-| `BEE_NATS_RESULT_TTL` | `24h` | How long results are kept. |
+### Settings
 
-### Subjects
+```sh
+BEE_NATS_URL=nats://nats:4222   # the nats server; empty: NATS is off
+BEE_NATS_TOKEN=                 # auth token of the nats server; empty: none
+BEE_NATS_JOBS=bee.jobs          # subject of every job
+BEE_NATS_DONE=bee.done          # subject of every result
+BEE_NATS_ACK_WAIT=1m            # a job with no sign of life this long goes to another bee
+BEE_NATS_MAX_DELIVER=5          # deliveries of one job; the error of the last one is final
+BEE_NATS_RETRY_DELAY=10s        # delay before the second delivery, doubled after each
+BEE_NATS_RETRY_MAX_DELAY=5m     # longest delay between deliveries
+BEE_NATS_STORAGE=file           # file or memory, for both streams
+BEE_NATS_REPLICAS=1             # stream replicas, 1..5
+BEE_NATS_MAX_AGE=0s             # a job nobody took is deleted after this; 0s: never
+BEE_NATS_RESULT_TTL=24h         # how long results are kept
+```
 
-Each base is tokens of `A-Z a-z 0-9 _ -` joined by dots, with no
-wildcards. The two bases must differ, and neither may lie inside the other.
+`BEE_TOKEN` is not used on NATS.
 
-| what | subject | default example |
-|---|---|---|
-| a job of a kind (publish here) | `<jobs>.<kind>` | `bee.jobs.new.audio` |
-| the result of one job | `<done>.<kind>.<id>` | `bee.jobs.done.audio.track-1001` |
-| results of one kind | `<done>.<kind>.*` | `bee.jobs.done.audio.*` |
-| all results | `<done>.>` | `bee.jobs.done.>` |
+### Two subjects
 
-`<kind>` is `audio`, `stream`, `video` or `images`.
+bee uses only two subjects. The kind and the id of a job travel inside the
+message, not in the subject.
+
+```
+bee.jobs    you publish every job here       (BEE_NATS_JOBS)
+bee.done    bee publishes every result here  (BEE_NATS_DONE)
+```
+
+A subject is made of tokens of `A-Z`, `a-z`, `0-9`, `_` and `-` joined by
+dots, with no wildcards (`*`, `>`). The two subjects must not be equal, and
+one must not lie inside the other (`media` and `media.done` is not
+allowed). bee checks this at start.
 
 ### Derived names
 
-Bee creates or updates these at start. JetStream names are the base with
-dots changed to `_`, in upper case:
+bee creates (or updates) two streams and one consumer at start. Their names
+come from the subjects: dots become `_`, letters become upper case.
 
-| object | name | default | config |
-|---|---|---|---|
-| job stream | `<jobs>` as a name | `BEE_JOBS_NEW` | subjects `<jobs>.*`, work-queue retention, `BEE_NATS_MAX_AGE` |
-| result stream | `<done>` as a name | `BEE_JOBS_DONE` | subjects `<done>.>`, limits retention, kept `BEE_NATS_RESULT_TTL` |
-| consumer | the job stream name | `BEE_JOBS_NEW` | durable pull, explicit ack, `BEE_NATS_ACK_WAIT`; bee counts deliveries itself |
+```
+BEE_JOBS    stream of the jobs (from bee.jobs): a work queue, a job is deleted once done
+BEE_DONE    stream of the results (from bee.done): every result kept BEE_NATS_RESULT_TTL
+BEE_JOBS    durable consumer of bee on the stream BEE_JOBS, shared by every bee
+```
+
+With `BEE_NATS_JOBS=bee.hetzner.jobs` the job stream and the consumer are
+`BEE_HETZNER_JOBS`.
+
+### The message: one envelope both ways
+
+Every message is a json **envelope**. A job:
+
+```json
+{
+  "kind": "images",
+  "job": {
+    "id": 42,
+    "meta": {"user": 7},
+    "input": "https://example.com/photo.jpg",
+    "tasks": [
+      {"id": "small", "output": "photos/1/small.webp",
+       "profile": {"format": "webp", "quality": 80, "max_width": 320}}
+    ]
+  }
+}
+```
+
+- `kind`: `audio`, `stream`, `video` or `images`.
+- `job`: the job json of that kind, exactly as over HTTP
+  ([audio](jobs-audio.md), [video](jobs-video.md), [images](jobs-images.md)).
+
+The result of that job, on the done subject:
+
+```json
+{
+  "kind": "images",
+  "id": 42,
+  "result": {
+    "id": 42,
+    "meta": {"user": 7},
+    "tasks": [
+      {"id": "small", "output": "photos/1/small.webp", "format": "webp",
+       "width": 320, "height": 240, "size": 198, "quality": 80,
+       "sha256": "fcd4954b...", "elapsed": 159}
+    ],
+    "elapsed": 399,
+    "sha256": "6ce75867...",
+    "source_size": 5599,
+    "source_format": "jpg",
+    "source_width": 640,
+    "source_height": 480
+  }
+}
+```
+
+- `kind`: the kind of the job.
+- `id`: the id of the job, exactly as sent.
+- `result`: the result json of that kind, exactly as over HTTP.
+
+A failed job has `error` in its result:
+
+```json
+{
+  "kind": "images",
+  "id": 43,
+  "result": {
+    "id": 43,
+    "meta": {"user": 7},
+    "elapsed": 0,
+    "error": {"code": "INVALID_QUALITY", "message": "task small: quality is required for a lossy webp", "retryable": false}
+  }
+}
+```
+
+### Without the Go client: the nats CLI
+
+The Go client is in [clients.md](clients.md#nats). Any other language does
+the same with a NATS library; here it is with the `nats` CLI and the default
+subjects.
+
+**Watch results** as they come (a plain subscription: it sees only the
+results published while it runs):
+
+```sh
+nats sub bee.done
+```
+
+**Send a job.** `nats pub` publishes it; `nats req` does the same and
+prints the JetStream answer, so you know the job is stored:
+
+```sh
+nats req bee.jobs '{"kind":"images","job":{"id":"photo-1","input":"https://example.com/photo.jpg","tasks":[{"id":"small","output":"photos/1/small.webp","profile":{"format":"webp","quality":80,"max_width":320}}]}}'
+# {"stream":"BEE_JOBS","seq":1}
+```
+
+**Read results reliably** with a durable consumer of your own. NATS
+remembers which results it gave to it, so nothing is missed while your
+service is down:
+
+```sh
+# once: a consumer "my-service" on the results stream
+nats consumer add BEE_DONE my-service --pull --deliver all --ack explicit --filter bee.done --defaults
+
+# take the next result (and ack it)
+nats consumer next BEE_DONE my-service
+
+# up to 10 results, only the json
+nats consumer next BEE_DONE my-service --count 10 --raw
+```
+
+In a program: pull from the consumer, handle the result, then ack it. A
+result you do not ack comes again. Several instances with the same consumer
+name share the results; another consumer name gets its own copy of every
+result. `--deliver all` also gives the results that are already in the
+stream (kept `BEE_NATS_RESULT_TTL`).
+
+The Go client does the same for you: `SubscribeAudio`, `SubscribeStream`,
+`SubscribeVideo` and `SubscribeImages` create durable consumers named
+`<done stream>_<GROUP>_<KIND>`, for example `BEE_DONE_DEFAULT_AUDIO`
+([clients.md](clients.md#read-the-results)). Pick other consumer names for
+your own consumers.
 
 ### Delivery semantics
 
-The job stream is a work queue, and every bee with the same bases pulls
+The job stream is a work queue, and every bee with the same subjects pulls
 from one shared durable consumer. Each job goes to one bee at a time. A
 bee pulls a job only when it has a free slot (`BEE_CONCURRENCY`). The
 slots are shared with HTTP and gRPC: a NATS job that finds them all taken
@@ -198,91 +335,80 @@ the message goes to another bee after `BEE_NATS_ACK_WAIT`.
 
 A delivery ends in one of three ways:
 
-| case | what bee does |
-|---|---|
-| Done, or failed with a final code | Publishes the result on `<done>.<kind>.<id>`, waits for JetStream to confirm it, then acks the job. |
-| Failed with a redeliverable code, and the delivery number is below `BEE_NATS_MAX_DELIVER` | Publishes no result and naks with a delay of `RETRY_DELAY × 2^(n−1)`, capped at `RETRY_MAX_DELAY`. With the defaults: 10s, 20s, 40s, 80s. Delivery number `MAX_DELIVER` publishes its failure. |
-| Still running at shutdown | Running jobs get `BEE_SHUTDOWN_TIMEOUT`, then are cancelled and nak'ed at once without a result, so another bee takes them. |
+- **Done, or failed with a final code:** bee publishes the result on the
+  done subject, waits for JetStream to confirm it, then acks the job.
+- **Failed with a temporary code, and this is not the last delivery:** bee
+  publishes nothing and gives the job back with a delay of
+  `BEE_NATS_RETRY_DELAY × 2^(n−1)`, at most `BEE_NATS_RETRY_MAX_DELAY`. With
+  the defaults: 10s, 20s, 40s, 80s. Delivery number `BEE_NATS_MAX_DELIVER`
+  publishes its failure.
+- **Still running at shutdown:** running jobs get `BEE_SHUTDOWN_TIMEOUT`,
+  then are cancelled and given back at once without a result, so another
+  bee takes them.
 
-- **Redeliverable codes:** `DOWNLOAD_TIMEOUT`, `SOURCE_UNAVAILABLE`,
-  `STORAGE_TIMEOUT`, `STORAGE_UNAVAILABLE` and `INTERNAL_TEMPORARY_ERROR`.
-- **`SOURCE_URL_EXPIRED`** is `retryable` but not redelivered: its failure
-  is published at once. Send a new job with a fresh url.
+More:
+
+- **Temporary codes** (delivered again): `DOWNLOAD_TIMEOUT`,
+  `SOURCE_UNAVAILABLE`, `STORAGE_TIMEOUT`, `STORAGE_UNAVAILABLE` and
+  `INTERNAL_TEMPORARY_ERROR`.
+- **`SOURCE_URL_EXPIRED`** is `retryable` but not delivered again: its
+  failure is published at once. Send a new job with a fresh url.
 - **Delivery count:** every delivery counts, including those after an ack
   wait or a shutdown.
 - **Unconfirmed result:** if JetStream does not confirm the result
-  publish, the job is nak'ed and runs again. A result is never lost, but
-  it can be published twice.
+  publish, the job is given back and runs again. A result is never lost,
+  but it can be published twice.
 
 ### Redelivery
 
-A redelivered job (lost ack, crashed bee) runs again, writes over its keys
-and publishes its result again on `<done>.<kind>.<id>`.
+A job delivered again (lost ack, crashed bee) runs again, writes over its
+keys and publishes its result again on the done subject. Your result
+handler may see the same job id twice; make it safe for that.
 
 ### Malformed messages
 
-| message | outcome |
-|---|---|
-| Subject `<jobs>.<x>` where `x` is not a known kind | Terminated, nothing published. |
-| Body with no readable id, or an id that breaks the rule | Terminated, nothing published. Bee logs only the byte count, never the body. |
-| Any other job that is not valid (bad json, bad fields) | Failure published on `<done>.<kind>.<id>`, usually `INVALID_JOB`. |
+- **Not a json envelope, or an unknown `kind`:** the message is dropped
+  (terminated) and logged. Nothing is published.
+- **A job without an id, or with an id that breaks the [rule](#transports-the-wire-protocol)**
+  (a string of 1..128 printable characters or a whole number): dropped and logged. Nothing is published: there
+  is no id to report to.
+- **A job with a valid id that is otherwise not valid** (bad fields, bad
+  urls, bad keys, `meta` over 16 KB): the failure is published on the done
+  subject, usually `INVALID_JOB`.
 
-A waiting client sees nothing for a terminated job, so validate the id
-before you publish.
+bee logs only the size of a dropped message, never its body (it may hold a
+presigned url). Nobody hears about a dropped message, so check the job
+before you publish; the Go client does this for you.
 
-### Sending a job without the Go client
+### Several groups of bees on one NATS
 
-1. Pick a unique job id. Reuse an id only to retry the same job.
-2. Start listening for the result **before** you publish, so you cannot
-   miss it. Either:
-   - subscribe to `<done>.<kind>.<id>` (a plain NATS subscription also
-     receives messages stored by the stream), or
-   - create an ordered JetStream consumer on stream `<DONE>` with filter
-     subject `<done>.<kind>.<id>` and deliver policy *new*.
-3. Publish the job json to `<jobs>.<kind>` as a JetStream publish, and
-   check the publish ack (`{"stream":"BEE_JOBS_NEW","seq":…}`).
-4. Wait for one message. It is the result json; check its `error`.
+Bees with the same subjects share one queue and must share one storage:
+any of them may take any job. To run groups with different buckets on the
+same NATS server, give each group its own two subjects.
 
-If you stop waiting, the job still runs. Its result stays in the result
-stream for `BEE_NATS_RESULT_TTL`. Read it later with a consumer filtered to
-`<done>.<kind>.<id>` and deliver policy *last*, or a direct get of the last
-message for that subject.
-
-With the `nats` CLI and default bases:
+Group "eu":
 
 ```sh
-# 1. listen first
-nats sub 'bee.jobs.done.images.photo-77' --count 1 &
-
-# 2. publish; a request to a stream subject returns the JetStream ack
-nats req bee.jobs.new.images "$(cat job.json)"
-
-# later: the last result of the job
-nats stream get BEE_JOBS_DONE --last-for 'bee.jobs.done.images.photo-77'
+BEE_NATS_JOBS=eu.jobs    # stream and consumer EU_JOBS
+BEE_NATS_DONE=eu.done    # stream EU_DONE
 ```
 
-### Several bee groups on one NATS
+Group "us":
 
-Bees with the same bases share one queue and must share one storage: any
-of them may take any job. To run groups with different buckets on the same
-NATS server, give each group its own bases:
+```sh
+BEE_NATS_JOBS=us.jobs    # stream and consumer US_JOBS
+BEE_NATS_DONE=us.done    # stream US_DONE
+```
 
-| group | `BEE_NATS_JOBS` | `BEE_NATS_DONE` | job stream / consumer | result stream |
-|---|---|---|---|---|
-| default | `bee.jobs.new` | `bee.jobs.done` | `BEE_JOBS_NEW` | `BEE_JOBS_DONE` |
-| eu | `eu.jobs.new` | `eu.jobs.done` | `EU_JOBS_NEW` | `EU_JOBS_DONE` |
-| us | `us.jobs.new` | `us.jobs.done` | `US_JOBS_NEW` | `US_JOBS_DONE` |
+Clients send to a group with the same subjects: `proto.Names{Jobs:
+"eu.jobs", Done: "eu.done"}` in Go, or the subjects directly.
 
-Clients send to a group with the same bases: `proto.Names{Jobs, Done}` in
-Go, or the subjects above directly.
-
-Avoiding name conflicts is your job. If a group's subjects overlap another
-stream's subjects, or its names collide with existing streams, NATS refuses
-the stream. Bee then does not start, and its error names the stream and
-subjects, e.g.:
+Avoiding name conflicts is your job. If a subject is already held by
+another stream, NATS refuses the stream. bee then does not start, and its
+error names the stream and the subject, e.g.:
 
 ```
-nats: stream EU_JOBS_NEW of subjects eu.jobs.new.* (another stream may hold them): …
+nats: stream EU_JOBS of subjects eu.jobs (another stream may hold them): …
 ```
 
 ## Health server

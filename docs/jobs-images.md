@@ -6,7 +6,7 @@ effects, encoded as jpg, png, webp or avif, and optionally kept under a
 byte limit. The original is decoded once and every task reuses it.
 
 - Kind: `images`. HTTP `POST /v1/images`, gRPC `bee.v1.Bee/Images`, NATS
-  `<jobs>.images`. See [transports.md](transports.md).
+  `{"kind":"images","job":{...}}` on the jobs subject. See [transports.md](transports.md).
 - Go types: `github.com/angels-you/bee/pkg/types/images` (`Job`, `Task`,
   `Profile`, `Result`, `TaskResult`, `Format`, `Fit`, `Geometry`).
 - Pipeline: `internal/engine/images.go` (vips).
@@ -16,7 +16,8 @@ byte limit. The original is decoded once and every task reuses it.
 
 | json | type | required | meaning |
 |---|---|---|---|
-| `id` | string | yes | 1..128 characters of `A-Z a-z 0-9 _ -`. |
+| `id` | string or number | yes | A string of 1..128 printable characters (any language, spaces allowed, no line breaks) or a whole number. Returned in the result exactly as sent. |
+| `meta` | object | no | Your own data. bee never reads it and returns it untouched in the result, on failure too. At most 16 KB of json. |
 | `input` | string | yes | Url of the original (presigned GET or public https), logged without its query. Scheme and host rules are checked at download, see [security.md](security.md). |
 | `tasks` | Task[] | yes, at least 1 | Results, made in this order. |
 
@@ -142,7 +143,8 @@ Each result is written to its `output` key, and nothing else is written.
 
 ```json
 {
-  "id": "photo-77",
+  "id": 77,
+  "meta": {"user": 7},
   "input": "https://uploads.example.com/raw/77.heic?X-Amz-Signature=...",
   "tasks": [
     {
@@ -169,7 +171,8 @@ Each result is written to its `output` key, and nothing else is written.
 
 | json | type | meaning |
 |---|---|---|
-| `id` | string | Job id. |
+| `id` | string or number | Job id, exactly as sent. |
+| `meta` | object | Job `meta`, exactly as sent. |
 | `tasks` | TaskResult[] | In task order. Absent on failure. |
 | `elapsed` | int | Milliseconds for the whole job. |
 | `sha256` | string | Of the original. |
@@ -202,7 +205,8 @@ sha256 after the download, and format and size after the header.
 
 ```json
 {
-  "id": "photo-77",
+  "id": 77,
+  "meta": {"user": 7},
   "tasks": [
     {"id": "large", "output": "photos/77/large.avif", "format": "avif", "width": 1536, "height": 2048, "size": 398112, "quality": 52,
      "sha256": "c3a1…9f", "thumbhash": "1QcSHQRnh493V4dIh4eXh1h4kJUI", "dominant_color": "#5a6b3c", "elapsed": 2140},

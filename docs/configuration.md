@@ -108,12 +108,15 @@ local keys are not required, and the other way round.
 
 ### Transports
 
-| Key | Default | Required | Meaning |
-|---|---|---|---|
-| `BEE_HTTP_ADDR` | empty (off) | one transport | HTTP listen address, e.g. `:8080`. Jobs only (`POST /v1/<kind>`). Needs `BEE_TOKEN`. |
-| `BEE_GRPC_ADDR` | empty (off) | one transport | gRPC listen address, e.g. `:9090`. Needs `BEE_TOKEN`. |
-| `BEE_TOKEN` | empty | with http or grpc | Shared token: `Authorization: Bearer <token>`. Not used by NATS. |
-| `BEE_HEALTH_ADDR` | `:8081` | always on | Health server: `GET /health`, `/ready`, `/metrics`. No token. |
+```sh
+BEE_HTTP_ADDR=      # HTTP listen address, e.g. :8080; empty: off. Needs BEE_TOKEN
+BEE_GRPC_ADDR=      # gRPC listen address, e.g. :9090; empty: off. Needs BEE_TOKEN
+BEE_TOKEN=          # token of HTTP and gRPC: "Authorization: Bearer <token>"; not used by NATS
+BEE_HEALTH_ADDR=:8081   # health server, always on, no token: /health, /ready, /metrics
+```
+
+At least one transport is required (HTTP, gRPC or NATS). `BEE_TOKEN` is
+required when HTTP or gRPC is on. HTTP takes jobs only (`POST /v1/<kind>`).
 
 `cmd/.env` sets `BEE_HTTP_ADDR=:8080` and `BEE_TOKEN=change-me` as an
 example; the code defaults for both are empty. Change the token.
@@ -123,27 +126,40 @@ example; the code defaults for both are empty. Change the token.
 NATS JetStream is on when `BEE_NATS_URL` is set. The other keys are checked
 only then.
 
-| Key | Default | Meaning |
-|---|---|---|
-| `BEE_NATS_URL` | empty (off) | e.g. `nats://nats:4222` |
-| `BEE_NATS_TOKEN` | empty | NATS auth token; empty: none |
-| `BEE_NATS_JOBS` | `bee.jobs.new` | Subject base of the jobs: jobs come on `<jobs>.<kind>` |
-| `BEE_NATS_DONE` | `bee.jobs.done` | Subject base of the results: results go to `<done>.<kind>.<id>` |
-| `BEE_NATS_ACK_WAIT` | `1m` | How long a delivery lives without a sign of life before JetStream gives it to another bee. A running job sends "in progress" every ack wait / 3. |
-| `BEE_NATS_MAX_DELIVER` | `5` | Deliveries of one job; the failure of the last one is final and published |
-| `BEE_NATS_RETRY_DELAY` | `10s` | Redelivery delay after the first failed delivery, doubled after each next one |
-| `BEE_NATS_RETRY_MAX_DELAY` | `5m` | Longest redelivery delay; at least `BEE_NATS_RETRY_DELAY` |
-| `BEE_NATS_STORAGE` | `file` | JetStream storage of the streams: `file` or `memory` |
-| `BEE_NATS_REPLICAS` | `1` | Stream replicas, `1..5`, at most the number of servers in the cluster |
-| `BEE_NATS_MAX_AGE` | `0s` | A job not taken within this time is deleted; `0s`: never |
-| `BEE_NATS_RESULT_TTL` | `24h` | How long results are kept; longer than a job may wait for redelivery |
+```sh
+BEE_NATS_URL=                   # e.g. nats://nats:4222; empty: off
+BEE_NATS_TOKEN=                 # auth token of the nats server; empty: none
+BEE_NATS_JOBS=bee.jobs          # subject of every job
+BEE_NATS_DONE=bee.done          # subject of every result
+BEE_NATS_ACK_WAIT=1m            # a job with no sign of life this long goes to another bee
+BEE_NATS_MAX_DELIVER=5          # deliveries of one job; the failure of the last one is final
+BEE_NATS_RETRY_DELAY=10s        # delay before the second delivery, doubled after each
+BEE_NATS_RETRY_MAX_DELAY=5m     # longest delay; at least BEE_NATS_RETRY_DELAY
+BEE_NATS_STORAGE=file           # where JetStream keeps the streams: file or memory
+BEE_NATS_REPLICAS=1             # stream replicas, 1..5, at most the servers in the cluster
+BEE_NATS_MAX_AGE=0s             # a job nobody took is deleted after this; 0s: never
+BEE_NATS_RESULT_TTL=24h         # how long results are kept
+```
 
-Subject bases are tokens of `A-Z a-z 0-9 _ -` joined by dots, without
-wildcards; the two bases must differ and one must not lie inside the other.
-Stream and consumer names are derived from the bases (dots to `_`,
-upper case): `bee.jobs.new` gives the stream and consumer `BEE_JOBS_NEW`. Bees with the same bases share one
+A running job tells NATS it is alive every `BEE_NATS_ACK_WAIT / 3`, so a
+long job keeps its delivery.
+
+The two subjects:
+
+- are made of tokens of `A-Z`, `a-z`, `0-9`, `_` and `-` joined by dots,
+  without wildcards;
+- must not be equal, and one must not lie inside the other.
+
+Stream and consumer names come from the subjects (dots to `_`, upper case):
+`bee.jobs` gives the job stream and the consumer `BEE_JOBS`, `bee.done`
+gives the result stream `BEE_DONE`. Bees with the same subjects share one
 queue, so they must write to the same storage; bees with another bucket on
-the same NATS need other bases. See [transports.md](transports.md).
+the same NATS need other subjects. See [transports.md](transports.md#nats-jetstream).
+
+The Go client reads results through its own consumers on the result stream,
+one per group and kind: `BEE_DONE_DEFAULT_AUDIO`, `BEE_DONE_DEFAULT_IMAGES`
+and so on ([clients.md](clients.md#read-the-results)). They are not bee
+settings.
 
 ### Common
 
@@ -245,3 +261,6 @@ Defaults of empty job fields (see [jobs-images.md](jobs-images.md)):
 
 `BEE_VERSION` is set by the image at build time and only shown in the start
 log.
+
+The job `meta` limit (16 KB of json) and the job id rule are fixed: no key
+changes them.

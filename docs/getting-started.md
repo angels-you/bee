@@ -59,6 +59,7 @@ curl -s -X POST localhost:8080/v1/images \
   -H 'Content-Type: application/json' \
   -d '{
     "id": "photo-1",
+    "meta": {"user": 7},
     "input": "https://example.com/photo.jpg",
     "tasks": [
       {
@@ -75,11 +76,15 @@ curl -s -X POST localhost:8080/v1/images \
   }'
 ```
 
+- `id` is required: a string of 1..128 printable characters, or a whole number. The result returns it exactly as sent.
+- `meta` is optional: your own data, at most 16 KB of JSON. bee never reads it and returns it untouched in the result.
+
 The request lasts as long as the job. A done job answers `200` with the result:
 
 ```json
 {
   "id": "photo-1",
+  "meta": {"user": 7},
   "tasks": [
     {"id": "small", "output": "photos/1/small.webp", "format": "webp", "width": 320, "height": 213,
      "size": 9120, "quality": 80, "sha256": "...", "elapsed": 85},
@@ -98,7 +103,7 @@ The request lasts as long as the job. A done job answers `200` with the result:
 A failed job answers an HTTP status that matches its error code (for example `400` for `INVALID_JOB`, `422` for `INVALID_AUDIO`, `503` for `INTERNAL_TEMPORARY_ERROR`) and the result with `error` set:
 
 ```json
-{"id": "photo-1", "elapsed": 210, "error": {"code": "SOURCE_UNAVAILABLE", "message": "...", "retryable": true}}
+{"id": "photo-1", "meta": {"user": 7}, "elapsed": 210, "error": {"code": "SOURCE_UNAVAILABLE", "message": "...", "retryable": true}}
 ```
 
 A missing or wrong token answers `401` with `{"error": {"code": "INVALID_JOB", "message": "bad or missing token", "retryable": false}}`. All codes and statuses: [errors.md](errors.md).
@@ -120,18 +125,18 @@ import (
 	"os"
 	"time"
 
-	"github.com/angels-you/bee/pkg/clients/http"
+	"github.com/angels-you/bee/pkg/clients/http" // package beehttp
 	"github.com/angels-you/bee/pkg/types/code"
 	"github.com/angels-you/bee/pkg/types/images"
 )
 
 func main() {
-	c := &http.Client{URL: "http://localhost:8080", Token: os.Getenv("BEE_TOKEN")}
+	c := &beehttp.Client{URL: "http://localhost:8080", Token: os.Getenv("BEE_TOKEN")}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
-	res, err := c.Images(ctx, images.Job{
+	res, err := c.GenerateImages(ctx, images.Job{
 		ID:    "photo-1",
 		Input: "https://example.com/photo.jpg",
 		Tasks: []images.Task{{
@@ -152,7 +157,7 @@ func main() {
 }
 ```
 
-The same program with flags lives in [examples/http](../examples/http/main.go); gRPC and NATS versions in [examples/grpc](../examples/grpc/main.go) and [examples/nats](../examples/nats/main.go). Clients in detail: [clients.md](clients.md).
+The same program with flags lives in [examples/http](../examples/http/main.go); a gRPC version in [examples/grpc](../examples/grpc/main.go). Over NATS a job is sent and forgotten (`GenerateImages` returns once NATS has it), and a worker of yours reads the results with `SubscribeImages`: [examples/nats](../examples/nats/main.go). Clients in detail: [clients.md](clients.md).
 
 ## 5. Where the outputs land
 
