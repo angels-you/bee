@@ -305,11 +305,10 @@ type worker struct {
 
 // dial is a client of group with a subscriber of every kind.
 func (a *worker) dial(cfg config.NATS, group string) *beenats.Client {
-	c, err := beenats.Dial(cfg.URL, cfg.Token, cfg.Names())
+	c, err := beenats.Dial(group, cfg.URL, cfg.Token, cfg.Names())
 	if err != nil {
 		a.t.Fatal(err)
 	}
-	c.Group = group
 
 	// one subscriber of every kind
 	errs := []error{

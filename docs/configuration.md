@@ -157,7 +157,7 @@ queue, so they must write to the same storage; bees with another bucket on
 the same NATS need other subjects. See [transports.md](transports.md#nats-jetstream).
 
 The Go client reads results through its own consumers on the result stream,
-one per group and kind: `BEE_DONE_DEFAULT_AUDIO`, `BEE_DONE_DEFAULT_IMAGES`
+one per group and kind: `BEE_DONE_BILLING_AUDIO`, `BEE_DONE_BILLING_IMAGES`
 and so on ([clients.md](clients.md#read-the-results)). They are not bee
 settings.
 

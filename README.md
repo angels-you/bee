@@ -117,7 +117,7 @@ import (
 
 func main() {
 	// subjects bee.jobs and bee.done
-	c, err := beenats.Dial("nats://nats:4222", "", proto.Names{})
+	c, err := beenats.Dial("billing", "nats://nats:4222", "", proto.Names{}) // "billing": the group of your service
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -317,7 +317,7 @@ stream (kept `BEE_NATS_RESULT_TTL`).
 
 The Go client does the same for you: `SubscribeAudio`, `SubscribeStream`,
 `SubscribeVideo` and `SubscribeImages` create durable consumers named
-`<done stream>_<GROUP>_<KIND>`, for example `BEE_DONE_DEFAULT_AUDIO`
+`<done stream>_<GROUP>_<KIND>`, for example `BEE_DONE_BILLING_AUDIO`
 ([clients.md](clients.md#read-the-results)). Pick other consumer names for
 your own consumers.
 

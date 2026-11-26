@@ -5,7 +5,7 @@
 // SubscribeVideo and SubscribeImages turn the client into a worker of the
 // results.
 //
-//	c, err := beenats.Dial("nats://nats:4222", os.Getenv("NATS_TOKEN"), proto.Names{})
+//	c, err := beenats.Dial("billing", "nats://nats:4222", os.Getenv("NATS_TOKEN"), proto.Names{})
 //	if err != nil {
 //		return err
 //	}
@@ -22,6 +22,10 @@
 //
 //	// send
 //	err = c.GenerateImages(images.Job{ID: 42, Input: url, Tasks: tasks, Meta: map[string]any{"user": 7}})
+//
+// The first argument is the group of the service that reads the results,
+// for example "billing" or "api": every instance with the same group
+// shares the results, a service with another group gets its own copy.
 //
 // proto.Names holds the two subjects of the bees (BEE_NATS_JOBS and
 // BEE_NATS_DONE); the zero value is the defaults bee.jobs and bee.done.
@@ -50,11 +54,11 @@ import (
 // Client sends jobs to the bees of one pair of subjects and reads their
 // results.
 type Client struct {
-	// Group is the group of the subscribers, "default" by default: every
-	// instance of a service with the same group shares the results, a
-	// service with another group gets its own copy. Set it before the
-	// first Subscribe; A-Z, a-z, 0-9, _ and - only
-	Group string
+	// group is the name of the service that reads the results, for
+	// example "billing" or "api": every instance of a service with the
+	// same group shares the results, a service with another group gets
+	// its own copy
+	group string
 
 	nc      *nats.Conn
 	js      jetstream.JetStream
@@ -68,7 +72,13 @@ type Client struct {
 }
 
 // Dial connects to url with token (empty: none) for the bees of names.
-func Dial(url, token string, names proto.Names, opts ...nats.Option) (*Client, error) {
+//
+// group is required: the name of your service that reads the results, for
+// example "billing" or "api" (A-Z, a-z, 0-9, _ and - only). Every instance
+// with the same group shares the results; another group gets its own copy
+//
+//	c, err := beenats.Dial("billing", "nats://nats:4222", "", proto.Names{})
+func Dial(group, url, token string, names proto.Names, opts ...nats.Option) (*Client, error) {
 	if token != "" {
 		opts = append(opts, nats.Token(token))
 	}
@@ -80,7 +90,7 @@ func Dial(url, token string, names proto.Names, opts ...nats.Option) (*Client, e
 	}
 
 	// the client
-	a, err := New(nc, names)
+	a, err := New(group, nc, names)
 	if err != nil {
 		nc.Close()
 		return nil, err
@@ -91,8 +101,25 @@ func Dial(url, token string, names proto.Names, opts ...nats.Option) (*Client, e
 }
 
 // New uses an open connection for the bees of names.
-func New(nc *nats.Conn, names proto.Names) (*Client, error) {
+//
+// group is required: the name of your service that reads the results, for
+// example "billing" or "api" (A-Z, a-z, 0-9, _ and - only). Every instance
+// with the same group shares the results; another group gets its own copy
+//
+//	c, err := beenats.New("billing", nc, proto.Names{})
+func New(group string, nc *nats.Conn, names proto.Names) (*Client, error) {
+	// the group is required
+	if group == "" {
+		return nil, errors.New(`beenats: group is required, for example "billing"`)
+	}
+
 	err := names.Validate()
+	if err != nil {
+		return nil, err
+	}
+
+	// the group must fit a consumer name
+	_, err = names.Subscriber(group, proto.Kinds()[0])
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +129,7 @@ func New(nc *nats.Conn, names proto.Names) (*Client, error) {
 		return nil, err
 	}
 
-	a := &Client{nc: nc, js: js, names: names}
+	a := &Client{group: group, nc: nc, js: js, names: names}
 	a.init()
 
 	return a, nil
@@ -110,7 +137,6 @@ func New(nc *nats.Conn, names proto.Names) (*Client, error) {
 
 // init sets the defaults of the client.
 func (a *Client) init() {
-	a.Group = "default"
 	a.timeout = 10 * time.Second
 	a.retry = 5 * time.Second
 }
@@ -248,7 +274,7 @@ func (a *Client) SubscribeImages(v func(res images.Result)) error {
 // kind: results of other kinds are acked at once, the results of kind go
 // to handle.
 func (a *Client) subscribe(kind proto.Kind, handle func(proto.Envelope) error) error {
-	name, err := a.names.Subscriber(a.Group, kind)
+	name, err := a.names.Subscriber(a.group, kind)
 	if err != nil {
 		return err
 	}

@@ -160,7 +160,7 @@ func (a Names) name(subject string) string {
 
 // Subscriber is the durable consumer of the results of kind for a group of
 // subscribers: <done stream>_<GROUP>_<KIND>, for example
-// BEE_DONE_DEFAULT_AUDIO. Every instance of a service with the same group
+// BEE_DONE_BILLING_AUDIO. Every instance of a service with the same group
 // shares the results; another group gets its own copy. The group is a
 // token of A-Z, a-z, 0-9, _ and -
 func (a Names) Subscriber(group string, kind Kind) (string, error) {

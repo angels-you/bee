@@ -86,8 +86,8 @@ One connection is reused by every call. The service is `bee.v1.Bee` ([`pkg/proto
 ```go
 import "github.com/angels-you/bee/pkg/clients/nats"
 
-func Dial(url, token string, names proto.Names, opts ...nats.Option) (*Client, error)
-func New(nc *nats.Conn, names proto.Names) (*Client, error)
+func Dial(group, url, token string, names proto.Names, opts ...nats.Option) (*Client, error)
+func New(group string, nc *nats.Conn, names proto.Names) (*Client, error)
 func (a *Client) Close()
 
 // send a job
@@ -124,7 +124,7 @@ import (
 )
 
 func main() {
-	c, err := beenats.Dial("nats://nats:4222", os.Getenv("NATS_TOKEN"), proto.Names{})
+	c, err := beenats.Dial("billing", "nats://nats:4222", os.Getenv("NATS_TOKEN"), proto.Names{})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -180,16 +180,16 @@ From then on the job lives in NATS, not in your program: it survives a restart o
 - **A panic in the handler** does not crash your program: the result comes again about 5 seconds later.
 - **Every kind has its own subscriber.** Subscribe only to the kinds you send; results of other kinds are skipped.
 
-**Groups.** `Client.Group` (default `"default"`) decides who shares the results. Set it before the first `Subscribe`; letters, digits, `_` and `-` only.
+**Groups.** The first argument of `Dial` and `New` is the group: the name of your service that reads the results, for example `"billing"` or `"api"`. It is required and decides who shares the results; letters, digits, `_` and `-` only.
 
 - **Same group: shared.** Several instances of one service with the same group share the results: each result goes to one of them.
 - **Other group: a copy.** Another service with another group gets its own copy of every result.
 
 ```go
-c.Group = "billing" // this service gets its own copy of every result
+c, err := beenats.Dial("billing", url, token, proto.Names{}) // the billing service gets its own copy of every result
 ```
 
-NATS remembers what each group has already got, so a restarted worker goes on where it stopped. The durable consumer is named `<done stream>_<GROUP>_<KIND>`, for example `BEE_DONE_DEFAULT_AUDIO`.
+NATS remembers what each group has already got, so a restarted worker goes on where it stopped. The durable consumer is named `<done stream>_<GROUP>_<KIND>`, for example `BEE_DONE_BILLING_AUDIO`.
 
 Results stay in NATS for `BEE_NATS_RESULT_TTL` (default `24h`). A worker that starts later, or a new group, still gets every result of that time.
 

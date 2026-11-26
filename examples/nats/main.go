@@ -27,8 +27,9 @@ func main() {
 	work := flag.Bool("work", false, "run the worker that prints the results")
 	flag.Parse()
 
+	// "example" is the group of this service: its instances share the results;
 	// proto.Names{} are the default subjects bee.jobs and bee.done
-	c, err := beenats.Dial(*url, *token, proto.Names{})
+	c, err := beenats.Dial("example", *url, *token, proto.Names{})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "dial:", err)
 		os.Exit(1)
