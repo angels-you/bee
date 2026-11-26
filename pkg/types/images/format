@@ -1,0 +1,11 @@
+package images
+
+// name=Format type=string
+avif // @mime=image/avif #output
+webp // @mime=image/webp #output
+png  // @mime=image/png #output
+jpg  // @mime=image/jpeg #output
+heic
+heif
+gif
+tiff
