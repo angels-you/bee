@@ -38,70 +38,71 @@ func (a Kind) Valid() bool {
 }
 
 // Names are the transport names of one group of bees. Jobs and Done are
-// the nats subject bases (BEE_NATS_JOBS, BEE_NATS_DONE; empty means the
-// default). Everything else is derived from them by one rule:
+// the two nats subjects (BEE_NATS_JOBS, BEE_NATS_DONE; empty means the
+// default): every job goes to Jobs, every result to Done, the kind and the
+// id travel inside the message (Envelope). The stream and consumer names
+// derive from the subjects by one rule:
 //
-//	job subject       <jobs>.<kind>          bee.jobs.new.audio
-//	result subject    <done>.<kind>.<id>     bee.jobs.done.audio.track-1
-//	job stream        <jobs> as a name       BEE_JOBS_NEW   (dots → _, upper case)
-//	result stream     <done> as a name       BEE_JOBS_DONE
-//	consumer          the job stream name    BEE_JOBS_NEW
+//	job subject       <jobs>                 bee.jobs
+//	result subject    <done>                 bee.done
+//	job stream        <jobs> as a name       BEE_JOBS   (dots → _, upper case)
+//	result stream     <done> as a name       BEE_DONE
+//	bee consumer      the job stream name    BEE_JOBS
 //
-// Bees with the same bases share one queue; bees with other buckets on
-// the same nats need other bases.
+// Bees with the same subjects share one queue; bees with other buckets on
+// the same nats need other subjects.
 type Names struct {
 	Jobs string
 	Done string
 }
 
-// JobsBase is the job subject base, bee.jobs.new by default
-func (a Names) JobsBase() string {
+// JobsSubject is the subject of every job, bee.jobs by default
+func (a Names) JobsSubject() string {
 	if a.Jobs == "" {
-		return "bee.jobs.new"
+		return "bee.jobs"
 	}
 
 	return a.Jobs
 }
 
-// DoneBase is the result subject base, bee.jobs.done by default
-func (a Names) DoneBase() string {
+// DoneSubject is the subject of every result, bee.done by default
+func (a Names) DoneSubject() string {
 	if a.Done == "" {
-		return "bee.jobs.done"
+		return "bee.done"
 	}
 
 	return a.Done
 }
 
-// Validate checks the bases: tokens of A-Z, a-z, 0-9, _ and - joined by
+// Validate checks the subjects: tokens of A-Z, a-z, 0-9, _ and - joined by
 // dots, no wildcards, not equal and not one inside the other
 func (a Names) Validate() error {
-	jobs := a.JobsBase()
-	done := a.DoneBase()
+	jobs := a.JobsSubject()
+	done := a.DoneSubject()
 
-	// each base on its own
-	for _, base := range []string{jobs, done} {
-		for _, token := range strings.Split(base, ".") {
+	// each subject on its own
+	for _, subject := range []string{jobs, done} {
+		for _, token := range strings.Split(subject, ".") {
 			if !a.token(token) {
-				return fmt.Errorf("nats subject base %q: tokens of A-Z, a-z, 0-9, _ and - joined by dots", base)
+				return fmt.Errorf("nats subject %q: tokens of A-Z, a-z, 0-9, _ and - joined by dots", subject)
 			}
 		}
 	}
 
-	// the two bases apart
+	// the two subjects apart
 	switch {
 	case jobs == done:
-		return errors.New("nats subject bases of jobs and results are equal: " + jobs)
+		return errors.New("nats subjects of jobs and results are equal: " + jobs)
 	case strings.HasPrefix(jobs, done+"."):
-		return fmt.Errorf("nats subject base %q lies inside %q", jobs, done)
+		return fmt.Errorf("nats subject %q lies inside %q", jobs, done)
 	case strings.HasPrefix(done, jobs+"."):
-		return fmt.Errorf("nats subject base %q lies inside %q", done, jobs)
+		return fmt.Errorf("nats subject %q lies inside %q", done, jobs)
 	}
 
 	return nil
 }
 
-// token reports whether s is one subject token of A-Z, a-z, 0-9, _ and -;
-// the same rule as a job id
+// token reports whether s is one subject token of A-Z, a-z, 0-9, _ and -
 func (a Names) token(s string) bool {
 	if s == "" {
 		return false
@@ -136,47 +137,15 @@ func (a Names) TrailerRetryable() string {
 	return "bee-retryable"
 }
 
-// JobsSubject is the subject of the jobs of kind: <jobs>.<kind>
-func (a Names) JobsSubject(kind Kind) string {
-	return a.JobsBase() + "." + string(kind)
-}
-
-// AllJobs are the subjects of the jobs of every kind: <jobs>.*
-func (a Names) AllJobs() string {
-	return a.JobsBase() + ".*"
-}
-
-// Kind is the kind of a job subject <jobs>.<kind>; not Valid when the
-// subject is not one
-func (a Names) Kind(subject string) Kind {
-	kind, ok := strings.CutPrefix(subject, a.JobsBase()+".")
-	if !ok {
-		return ""
-	}
-
-	return Kind(kind)
-}
-
-// DoneSubject is the subject of the result of job id of kind:
-// <done>.<kind>.<id>; the id is a valid subject token (see tools.ID)
-func (a Names) DoneSubject(kind Kind, id string) string {
-	return a.DoneBase() + "." + string(kind) + "." + id
-}
-
-// AllDone are the subjects of every result: <done>.>
-func (a Names) AllDone() string {
-	return a.DoneBase() + ".>"
-}
-
 // JobsStream is the JetStream stream of the jobs (a work queue)
 func (a Names) JobsStream() string {
-	return a.name(a.JobsBase())
+	return a.name(a.JobsSubject())
 }
 
 // DoneStream is the JetStream stream of the results, kept
 // BEE_NATS_RESULT_TTL
 func (a Names) DoneStream() string {
-	return a.name(a.DoneBase())
+	return a.name(a.DoneSubject())
 }
 
 // Consumer is the durable pull consumer every bee of the group shares
@@ -184,7 +153,7 @@ func (a Names) Consumer() string {
 	return a.JobsStream()
 }
 
-// name is a subject base as a JetStream name: dots to _, upper case
-func (a Names) name(base string) string {
-	return strings.ToUpper(strings.ReplaceAll(base, ".", "_"))
+// name is a subject as a JetStream name: dots to _, upper case
+func (a Names) name(subject string) string {
+	return strings.ToUpper(strings.ReplaceAll(subject, ".", "_"))
 }

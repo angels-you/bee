@@ -72,7 +72,7 @@ type Options struct {
 // scheme and host, limits and rendition folders are checked by the engine
 func (a *Job) Validate() *code.Error {
 	if !tools.ID(a.ID) {
-		return code.New(code.InvalidJob, "id must be 1..128 characters of A-Z, a-z, 0-9, _ and -", nil)
+		return code.New(code.InvalidJob, "id must be 1..128 printable characters", nil)
 	}
 
 	// url of the original

@@ -1,7 +1,10 @@
-// Command nats sends one HLS video job to bee over NATS JetStream and
-// prints the result.
+// Command nats sends one HLS video job to bee over NATS JetStream, or runs
+// a worker that prints every result.
 //
-//	NATS_URL=nats://localhost:4222 \
+//	# terminal 1: the worker of your service
+//	go run ./examples/nats -work
+//
+//	# terminal 2: send a job; it returns once NATS has it
 //	go run ./examples/nats -input https://example.com/clip.mp4
 package main
 
@@ -11,27 +14,41 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"time"
+	"os/signal"
 
 	"github.com/angels-you/bee/pkg/clients/nats"
 	"github.com/angels-you/bee/pkg/proto"
-	"github.com/angels-you/bee/pkg/types/code"
 	"github.com/angels-you/bee/pkg/types/video"
 )
 
 func main() {
-	url := flag.String("url", env("NATS_URL", "nats://localhost:4222"), "nats url")
+	url := flag.String("url", "nats://localhost:4222", "nats url")
 	token := flag.String("token", os.Getenv("NATS_TOKEN"), "nats auth token, empty: none")
-	input := flag.String("input", os.Getenv("BEE_INPUT"), "https url of the original video")
+	input := flag.String("input", "", "https url of the original video")
+	work := flag.Bool("work", false, "run the worker that prints the results")
 	flag.Parse()
 
-	// proto.Names{} are the default subjects bee.jobs.new and bee.jobs.done
-	c, err := beenats.Dial(*url, *token, proto.Names{Jobs: os.Getenv("BEE_NATS_JOBS"), Done: os.Getenv("BEE_NATS_DONE")})
+	// proto.Names{} are the default subjects bee.jobs and bee.done
+	c, err := beenats.Dial(*url, *token, proto.Names{})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "dial:", err)
 		os.Exit(1)
 	}
 	defer c.Close()
+
+	// stops on ctrl+c
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	// the worker
+	if *work {
+		err = c.Done(ctx, "example", show)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "done:", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	// vertical 9:16 HLS with two renditions and a cover
 	job := video.Stream{
@@ -44,25 +61,26 @@ func main() {
 		Thumbnails: []video.Thumbnail{{Output: "clips/1/cover.webp", Format: video.ImageWebP, Width: 720}},
 	}
 
-	// the wait ends with ctx; the job still runs and c.Result reads it later
-	ctx, cancel := context.WithTimeout(context.Background(), 11*time.Minute)
-	defer cancel()
-
-	res, err := c.Stream(ctx, job)
+	// send and forget: the result comes to the worker
+	err = c.Stream(ctx, job)
 	if err != nil {
-		e := code.As(err)
-		fmt.Fprintf(os.Stderr, "failed: %s %s (retryable %v)\n", e.Code, e.Message, e.Retryable)
+		fmt.Fprintln(os.Stderr, "send:", err)
 		os.Exit(1)
 	}
-
-	out, _ := json.MarshalIndent(res, "", "  ")
-	fmt.Println(string(out))
+	fmt.Println("sent", job.ID)
 }
 
-// env returns the env key or def when it is empty.
-func env(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+// show prints one result; returning nil acks it.
+func show(m proto.Envelope) error {
+	// a failed job
+	e := m.Failure()
+	if e != nil {
+		fmt.Printf("%s %s failed: %s %s (retryable %v)\n", m.Kind, m.ID, e.Code, e.Message, e.Retryable)
+		return nil
 	}
-	return def
+
+	// a done job
+	out, _ := json.MarshalIndent(m.Result, "", "  ")
+	fmt.Printf("%s %s done:\n%s\n", m.Kind, m.ID, out)
+	return nil
 }

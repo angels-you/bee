@@ -62,7 +62,7 @@ func TestRefuse(t *testing.T) {
 		want code.Code
 	}{
 		"no id":          {func(j *Job) { j.ID = "" }, code.InvalidJob},
-		"dotted id":      {func(j *Job) { j.ID = "a.b" }, code.InvalidJob},
+		"line break id":  {func(j *Job) { j.ID = "a\nb" }, code.InvalidJob},
 		"no input":       {func(j *Job) { j.Input = "" }, code.InvalidJob},
 		"input no host":  {func(j *Job) { j.Input = "a.wav" }, code.InvalidJob},
 		"no output":      {func(j *Job) { j.Output = "" }, code.InvalidPath},

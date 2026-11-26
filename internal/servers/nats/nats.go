@@ -1,11 +1,11 @@
-// Package nats accepts jobs from NATS JetStream. The subject bases come
-// from BEE_NATS_JOBS and BEE_NATS_DONE (proto.Names): jobs come in on
-// <jobs>.<kind> (the json of the job of kind) through one durable pull
-// consumer shared by every bee of the same bases, so the instances share
-// the queue; results (the json of the result) go out on
-// <done>.<kind>.<id> into the results stream, kept BEE_NATS_RESULT_TTL,
-// where a client reads the result of its job. bee makes both streams and the
-// consumer at start.
+// Package nats accepts jobs from NATS JetStream. BEE_NATS_JOBS and
+// BEE_NATS_DONE are the two subjects (proto.Names): every job comes on the
+// jobs subject as an envelope {"kind":"audio","job":{...}} through one
+// durable pull consumer shared by every bee of the same subjects, so the
+// instances share the queue; every result goes out on the done subject as
+// {"kind":"audio","id":"...","result":{...}} into the results stream, kept
+// BEE_NATS_RESULT_TTL, where the workers of the user read them. bee makes
+// both streams and the consumer at start.
 //
 // A delivery ends one of three ways:
 //
@@ -16,12 +16,11 @@
 //	unfinished at shutdown     no result, nak at once: another bee takes it
 //
 // A job delivered again (a lost ack or result, a bee that died) runs
-// again, writes over its keys and publishes its result again. bee never
-// refuses a job because its keys are taken.
+// again, writes over its keys and publishes its result again.
 //
-// A message on an unknown kind, or whose id cannot be read as a valid job
-// id, is terminated and logged; another message that is not a job is a
-// failure (INVALID_JOB) on its result subject. While a job runs its message
+// A message that is not an envelope, has an unknown kind or a job without
+// an id is terminated and logged; a readable job that is not valid is a
+// failure (INVALID_JOB) on the done subject. While a job runs its message
 // is kept alive (in progress every AckWait / 3).
 package nats
 
@@ -99,33 +98,33 @@ func (a *Consumer) setup(ctx context.Context) error {
 	// the jobs: a work queue
 	_, err = js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
 		Name:      a.names.JobsStream(),
-		Subjects:  []string{a.names.AllJobs()},
+		Subjects:  []string{a.names.JobsSubject()},
 		Retention: jetstream.WorkQueuePolicy,
 		Storage:   storage,
 		Replicas:  a.cfg.Replicas,
 		MaxAge:    a.cfg.MaxAge,
 	})
 	if err != nil {
-		return fmt.Errorf("nats: stream %s of subjects %s (another stream may hold them): %w", a.names.JobsStream(), a.names.AllJobs(), err)
+		return fmt.Errorf("nats: stream %s of subjects %s (another stream may hold them): %w", a.names.JobsStream(), a.names.JobsSubject(), err)
 	}
 
 	// the results: kept for the clients
 	_, err = js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
 		Name:      a.names.DoneStream(),
-		Subjects:  []string{a.names.AllDone()},
+		Subjects:  []string{a.names.DoneSubject()},
 		Retention: jetstream.LimitsPolicy,
 		Storage:   storage,
 		Replicas:  a.cfg.Replicas,
 		MaxAge:    a.cfg.ResultTTL,
 	})
 	if err != nil {
-		return fmt.Errorf("nats: stream %s of subjects %s (another stream may hold them): %w", a.names.DoneStream(), a.names.AllDone(), err)
+		return fmt.Errorf("nats: stream %s of subjects %s (another stream may hold them): %w", a.names.DoneStream(), a.names.DoneSubject(), err)
 	}
 
-	// the consumer of every job subject
+	// the consumer of the jobs
 	a.cons, err = js.CreateOrUpdateConsumer(ctx, a.names.JobsStream(), jetstream.ConsumerConfig{
 		Durable:       a.names.Consumer(),
-		FilterSubject: a.names.AllJobs(),
+		FilterSubject: a.names.JobsSubject(),
 		AckPolicy:     jetstream.AckExplicitPolicy,
 		AckWait:       a.cfg.AckWait,
 		MaxDeliver:    -1,
@@ -159,7 +158,7 @@ func (a *Consumer) Run(ctx context.Context, e *engine.Engine, concurrency int, s
 	defer cancel()
 
 	// pull until ctx is done
-	a.log.Info("nats: pulling", "stream", a.names.JobsStream(), "subjects", a.names.AllJobs(), "consumer", a.names.Consumer(), "concurrency", concurrency)
+	a.log.Info("nats: pulling", "stream", a.names.JobsStream(), "subjects", a.names.JobsSubject(), "consumer", a.names.Consumer(), "concurrency", concurrency)
 	for a.pull(ctx, work) {
 	}
 
@@ -253,38 +252,61 @@ func (a *Consumer) handle(work context.Context, msg jetstream.Msg) {
 		a.engine.Metrics.Retried()
 	}
 
-	// the kind of the job by its subject
-	kind := a.names.Kind(msg.Subject())
-	if !kind.Valid() {
-		a.malformed(msg, kind, "unknown subject "+msg.Subject())
+	// the envelope: kind and id, else nothing to report to
+	in, id, ok := a.open(msg)
+	if !ok {
 		return
 	}
 
 	// the job, kept alive while it runs
 	stop := make(chan struct{})
 	go a.keepAlive(msg, stop)
-	res, err := a.engine.Do(work, kind, msg.Data())
+	res, err := a.engine.Do(work, in.Kind, in.Job)
 	close(stop)
-
-	// the id of the result
-	var head struct {
-		ID string `json:"id"`
-	}
-	json.Unmarshal(res, &head)
 
 	// the end of the delivery
 	e := code.As(err)
 	switch {
 	case err != nil && work.Err() != nil:
-		a.log.Warn("nats: unfinished at shutdown, back to the queue", "job_id", head.ID, "delivered", meta.NumDelivered)
-		a.settle(msg.Nak(), "nak", head.ID)
+		a.log.Warn("nats: unfinished at shutdown, back to the queue", "job_id", id, "delivered", meta.NumDelivered)
+		a.settle(msg.Nak(), "nak", id)
 	case err != nil && e.Code.Redeliver() && meta.NumDelivered < uint64(a.cfg.MaxDeliver):
 		delay := a.backoff(meta.NumDelivered)
-		a.log.Info("nats: retry later", "job_id", head.ID, "delivered", meta.NumDelivered, "error_code", string(e.Code), "delay_ms", delay.Milliseconds())
-		a.settle(msg.NakWithDelay(delay), "nak", head.ID)
+		a.log.Info("nats: retry later", "job_id", id, "delivered", meta.NumDelivered, "error_code", string(e.Code), "delay_ms", delay.Milliseconds())
+		a.settle(msg.NakWithDelay(delay), "nak", id)
 	default:
-		a.report(msg, kind, head.ID, res, meta.NumDelivered)
+		a.report(msg, proto.Envelope{Kind: in.Kind, ID: id, Result: res}, meta.NumDelivered)
 	}
+}
+
+// open reads the envelope of a job and the id of its job. A message that
+// is not an envelope, has an unknown kind or a job without a valid id is
+// terminated and logged (ok false): there is nobody to report to. The
+// data itself is never logged: it may hold a presigned url
+func (a *Consumer) open(msg jetstream.Msg) (in proto.Envelope, id string, ok bool) {
+	err := json.Unmarshal(msg.Data(), &in)
+
+	// the id of the job inside
+	var head struct {
+		ID string `json:"id"`
+	}
+	if err == nil {
+		json.Unmarshal(in.Job, &head)
+	}
+
+	switch {
+	case err != nil:
+		a.log.Warn("nats: not an envelope, terminated", "bytes", len(msg.Data()), "error", err.Error())
+	case !in.Kind.Valid():
+		a.log.Warn("nats: unknown job kind, terminated", "kind", string(in.Kind))
+	case !tools.ID(head.ID):
+		a.log.Warn("nats: job without a valid id, terminated", "kind", string(in.Kind))
+	default:
+		return in, head.ID, true
+	}
+
+	a.settle(msg.Term(), "term", "")
+	return in, "", false
 }
 
 // release frees the slot of a finished delivery.
@@ -292,57 +314,31 @@ func (a *Consumer) release() {
 	<-a.slots
 }
 
-// malformed handles a message that is not a job: a failure when its id
-// can be read, else terminated. The data itself is never logged: it may
-// hold a presigned url.
-func (a *Consumer) malformed(msg jetstream.Msg, kind proto.Kind, cause string) {
-	var head struct {
-		ID string `json:"id"`
-	}
-	err := json.Unmarshal(msg.Data(), &head)
-
-	switch {
-	case err != nil, !tools.ID(head.ID), !kind.Valid():
-		a.log.Warn("nats: not a job, terminated", "bytes", len(msg.Data()), "error", cause)
-		a.settle(msg.Term(), "term", "")
-		return
-	}
-
-	// the failure goes to the results
-	e := code.New(code.InvalidJob, cause, nil)
-	res, _ := json.Marshal(struct {
-		ID    string      `json:"id"`
-		Error *code.Error `json:"error"`
-	}{head.ID, e})
-
-	a.log.Warn("nats: not a job", "job_id", head.ID, "error", cause)
-	a.report(msg, kind, head.ID, res, 0)
-}
-
-// report publishes the result, then acks. A publish JetStream does not
-// confirm leaves the job to a redelivery: the result is never lost, at
-// worst it is published twice.
-func (a *Consumer) report(msg jetstream.Msg, kind proto.Kind, id string, res []byte, delivered uint64) {
-	// an id that cannot be a subject token has no place for its result
-	if !tools.ID(id) {
-		a.log.Warn("nats: job without a valid id, terminated", "bytes", len(msg.Data()))
-		a.settle(msg.Term(), "term", "")
-		return
-	}
-
+// report publishes the result envelope on the done subject, then acks. A
+// publish JetStream does not confirm leaves the job to a redelivery: the
+// result is never lost, at worst it is published twice
+func (a *Consumer) report(msg jetstream.Msg, out proto.Envelope, delivered uint64) {
 	ctx, cancel := context.WithTimeout(context.Background(), a.cfg.AckWait)
 	defer cancel()
 
-	// the result
-	_, err := a.js.Publish(ctx, a.names.DoneSubject(kind, id), res)
+	// the envelope
+	data, err := json.Marshal(out)
 	if err != nil {
-		a.log.Warn("nats: result not published, retry later", "job_id", id, "error", err.Error())
-		a.settle(msg.NakWithDelay(a.backoff(delivered)), "nak", id)
+		a.log.Error("nats: result json", "job_id", out.ID, "error", err.Error())
+		a.settle(msg.Term(), "term", out.ID)
+		return
+	}
+
+	// the result
+	_, err = a.js.Publish(ctx, a.names.DoneSubject(), data)
+	if err != nil {
+		a.log.Warn("nats: result not published, retry later", "job_id", out.ID, "error", err.Error())
+		a.settle(msg.NakWithDelay(a.backoff(delivered)), "nak", out.ID)
 		return
 	}
 
 	// the ack
-	a.settle(msg.DoubleAck(ctx), "ack", id)
+	a.settle(msg.DoubleAck(ctx), "ack", out.ID)
 }
 
 // settle logs a failed ack, nak or term: JetStream redelivers the

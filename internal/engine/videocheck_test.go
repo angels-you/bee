@@ -225,7 +225,7 @@ func TestCheckStreamRefuses(t *testing.T) {
 	j.ID = ""
 	f.refuse(j, code.InvalidJob, "id must be")
 	j = f.stream()
-	j.ID = "job.1"
+	j.ID = "job\n1"
 	f.refuse(j, code.InvalidJob, "id must be")
 	j = f.stream()
 	j.Input = "http://bucket.s3.example.com/in.mov?X-Amz-Signature=secret"

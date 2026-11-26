@@ -37,7 +37,7 @@ func (a *videoCheck) checkStream(j *job.Stream) *code.Error {
 
 	// the job and its downloads
 	if !tools.ID(j.ID) {
-		return code.New(code.InvalidJob, "id must be 1..128 characters of A-Z, a-z, 0-9, _ and -", nil)
+		return code.New(code.InvalidJob, "id must be 1..128 printable characters", nil)
 	}
 	e := a.checkURL("input", j.Input)
 	if e != nil {
@@ -121,7 +121,7 @@ func (a *videoCheck) checkVideo(j *job.Video) *code.Error {
 
 	// the job and its downloads
 	if !tools.ID(j.ID) {
-		return code.New(code.InvalidJob, "id must be 1..128 characters of A-Z, a-z, 0-9, _ and -", nil)
+		return code.New(code.InvalidJob, "id must be 1..128 printable characters", nil)
 	}
 	e := a.checkURL("input", j.Input)
 	if e != nil {

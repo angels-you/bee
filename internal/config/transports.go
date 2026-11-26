@@ -29,15 +29,16 @@ func (a *GRPC) Enabled() bool {
 }
 
 // NATS receives jobs from NATS JetStream; empty URL disables it. Jobs and
-// Done are the subject bases: jobs come on <jobs>.<kind>, results go to
-// <done>.<kind>.<id>; the stream and consumer names are derived
-// from them (proto.Names). Bees with the same bases share one queue; bees
-// with other buckets on the same nats need other bases
+// Done are the two subjects: every job comes on Jobs, every result goes to
+// Done, the kind and the id travel inside the message (proto.Envelope);
+// the stream and consumer names are derived from them (proto.Names). Bees
+// with the same subjects share one queue; bees with other buckets on the
+// same nats need other subjects
 type NATS struct {
 	URL   string `env:"URL"`   // nats://host:4222
 	Token string `env:"TOKEN"` // nats auth token; empty: none
-	Jobs  string `env:"JOBS"`  // subject base of the jobs
-	Done  string `env:"DONE"`  // subject base of the results
+	Jobs  string `env:"JOBS"`  // subject of the jobs
+	Done  string `env:"DONE"`  // subject of the results
 
 	// AckWait is how long a delivery lives without signs of life before
 	// JetStream hands it to another bee; a running job sends progress every
@@ -59,7 +60,7 @@ type NATS struct {
 	ResultTTL time.Duration `env:"RESULT_TTL"`
 }
 
-// Names are the subjects and stream names of the bases
+// Names are the subjects and the stream names derived from them
 func (a *NATS) Names() proto.Names {
 	return proto.Names{Jobs: a.Jobs, Done: a.Done}
 }
@@ -71,10 +72,10 @@ func (a *NATS) Enabled() bool {
 
 // defaults are values proven in production
 func (a *NATS) defaults() {
-	// the subject bases: one public place for bee and its clients
+	// the subjects: one public place for bee and its clients
 	names := proto.Names{}
-	a.Jobs = names.JobsBase()
-	a.Done = names.DoneBase()
+	a.Jobs = names.JobsSubject()
+	a.Done = names.DoneSubject()
 
 	a.AckWait = time.Minute
 	a.MaxDeliver = 5
@@ -88,7 +89,7 @@ func (a *NATS) defaults() {
 
 // validate checks that the enabled nats fields are within their limits
 func (a *NATS) validate() (errs []error) {
-	// the subject bases: set, valid, apart
+	// the subjects: set, valid, apart
 	switch {
 	case a.Jobs == "":
 		errs = append(errs, errors.New("config: BEE_NATS_JOBS is required"))

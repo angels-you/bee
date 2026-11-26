@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // CleanKey returns a storage key in normal form: forward slashes, no ".." or
@@ -76,21 +78,23 @@ func SafeURL(raw string) string {
 	return u.String()
 }
 
-// ID reports whether id is a valid job id: 1..128 characters of A-Z,
-// a-z, 0-9, _ and - (uuid, ulid and numbers fit). The id goes into nats
-// subjects, so every transport holds it to this rule
+// ID reports whether id is a valid job id: 1..128 printable characters
+// (letters of any script, digits, punctuation, spaces), no line breaks or
+// other control characters; the same rule on every transport
 func ID(id string) bool {
-	if len(id) == 0 || len(id) > 128 {
+	// valid utf-8 of 1..128 characters
+	switch {
+	case !utf8.ValidString(id):
+		return false
+	case id == "":
+		return false
+	case utf8.RuneCountInString(id) > 128:
 		return false
 	}
 
+	// printable only
 	for _, r := range id {
-		switch {
-		case r >= 'a' && r <= 'z':
-		case r >= 'A' && r <= 'Z':
-		case r >= '0' && r <= '9':
-		case r == '_', r == '-':
-		default:
+		if !unicode.IsPrint(r) {
 			return false
 		}
 	}

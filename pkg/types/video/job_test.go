@@ -188,3 +188,29 @@ func TestParams(t *testing.T) {
 		t.Errorf("true peak %v", o.TruePeak)
 	}
 }
+
+// TestValidate checks the light checks of Stream and Video
+func TestValidate(t *testing.T) {
+	s := Stream{ID: "s1", Input: "https://example.com/a.mov", Output: "v/1/index.m3u8"}
+	e := s.Validate()
+	if e != nil {
+		t.Errorf("stream: %v", e)
+	}
+
+	v := Video{ID: "v1", Input: "https://example.com/a.mov", Output: "v/1/video.mp4"}
+	e = v.Validate()
+	if e != nil {
+		t.Errorf("video: %v", e)
+	}
+
+	bad := []Video{
+		{ID: "", Input: "https://example.com/a.mov", Output: "a.mp4"},
+		{ID: "v", Input: "a.mov", Output: "a.mp4"},
+		{ID: "v", Input: "https://example.com/a.mov", Output: "a/../b.mp4"},
+	}
+	for i, x := range bad {
+		if x.Validate() == nil {
+			t.Errorf("%d accepted", i)
+		}
+	}
+}

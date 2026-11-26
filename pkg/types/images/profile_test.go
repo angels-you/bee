@@ -171,7 +171,7 @@ func TestJobValidate(t *testing.T) {
 		want code.Code
 	}{
 		"no id":          {func(j *Job) { j.ID = "" }, code.InvalidJob},
-		"dotted id":      {func(j *Job) { j.ID = "a.b" }, code.InvalidJob},
+		"line break id":  {func(j *Job) { j.ID = "a\nb" }, code.InvalidJob},
 		"no input":       {func(j *Job) { j.Input = "" }, code.InvalidJob},
 		"no tasks":       {func(j *Job) { j.Tasks = nil }, code.InvalidJob},
 		"task no id":     {func(j *Job) { j.Tasks[1].ID = "" }, code.InvalidJob},

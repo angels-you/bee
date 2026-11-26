@@ -306,7 +306,7 @@ func TestToken(t *testing.T) {
 		t.Errorf("health addr %q", c.Health.Addr)
 	}
 
-	// bad subject bases
+	// bad subjects
 	bad := map[string][2]string{
 		"wildcard": {"bee.jobs.*", "bee.done"},
 		"equal":    {"bee.jobs", "bee.jobs"},
@@ -322,7 +322,7 @@ func TestToken(t *testing.T) {
 		}
 	}
 
-	// other valid bases
+	// other valid subjects
 	f.set("BEE_NATS_JOBS", "bee.hetzner.jobs", "BEE_NATS_DONE", "bee.hetzner.done")
 
 	c, err = Load()

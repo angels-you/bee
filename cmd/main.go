@@ -153,7 +153,7 @@ func (a *app) describe() []any {
 	// nats by its job subjects, when on
 	nats := ""
 	if cfg.NATS.Enabled() {
-		nats = cfg.NATS.Names().AllJobs()
+		nats = cfg.NATS.Names().JobsSubject()
 	}
 
 	return []any{

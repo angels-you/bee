@@ -4,10 +4,12 @@ package clients_test
 
 import (
 	"context"
+	"github.com/angels-you/bee/pkg/proto"
 	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -210,7 +212,10 @@ func TestGRPC(t *testing.T) {
 }
 
 // TestNATS — the nats client against the nats consumer and a nats-server
-// of the test (skipped without nats-server).
+// of the test (skipped without nats-server): jobs are sent without
+// waiting, a worker on Done gets the results of every kind, success and
+// failure; two workers with one name share the results, another name gets
+// its own copy.
 func TestNATS(t *testing.T) {
 	f := fixture{}
 	f.init(t)
@@ -236,12 +241,153 @@ func TestNATS(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer c.Close()
-	f.run(c)
 
-	// the stored result of a job sent earlier
-	var res images.Result
-	err = c.Result(f.ctx, "images", "i1", &res)
-	if err != nil || len(res.Tasks) != 2 {
-		t.Errorf("stored result: %+v %v", res, err)
+	// send and forget
+	f.send(c)
+
+	// a worker: all five results
+	got := f.collect(c, "worker", 5)
+	f.check(got)
+
+	// two workers with one name share the results
+	shared := map[string]int{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithTimeout(f.ctx, time.Minute)
+	defer cancel()
+
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			c.Done(ctx, "shared", func(m proto.Envelope) error {
+				mu.Lock()
+				defer mu.Unlock()
+
+				shared[m.ID]++
+				if len(shared) == 5 {
+					cancel()
+				}
+				return nil
+			})
+		}()
+	}
+	wg.Wait()
+
+	for id, n := range shared {
+		if n != 1 {
+			t.Errorf("shared workers got %s %d times", id, n)
+		}
+	}
+	if len(shared) != 5 {
+		t.Errorf("shared workers got %d results", len(shared))
+	}
+
+	// another name: its own copy of every result
+	other := f.collect(c, "other", 5)
+	if len(other) != 5 {
+		t.Errorf("another name got %d results", len(other))
+	}
+}
+
+// send sends a job of every kind and one that fails; an invalid job is
+// refused before it is sent.
+func (a *fixture) send(c *beenats.Client) {
+	t := a.t
+
+	err := c.Audio(a.ctx, a.bench.Audio("a1", "nats/audio"))
+	if err != nil {
+		t.Fatalf("audio: %v", err)
+	}
+
+	err = c.Stream(a.ctx, a.bench.Stream("s1", "nats/stream"))
+	if err != nil {
+		t.Fatalf("stream: %v", err)
+	}
+
+	err = c.Video(a.ctx, a.bench.Video("v1", "nats/video"))
+	if err != nil {
+		t.Fatalf("video: %v", err)
+	}
+
+	err = c.Images(a.ctx, a.bench.Images("i1", "nats/images"))
+	if err != nil {
+		t.Fatalf("images: %v", err)
+	}
+
+	// a job that fails in bee
+	bad := a.bench.Images("i2", "nats/bad")
+	bad.Input = a.bench.URL("missing.tif")
+	err = c.Images(a.ctx, bad)
+	if err != nil {
+		t.Fatalf("bad images: %v", err)
+	}
+
+	// a job that is not valid is never sent
+	err = c.Audio(a.ctx, a.bench.Audio("", "nats/none"))
+	if code.As(err) == nil || code.As(err).Code != code.InvalidJob {
+		t.Errorf("invalid job: %v", err)
+	}
+}
+
+// collect reads n results with the consumer name.
+func (a *fixture) collect(c *beenats.Client, name string, n int) map[string]proto.Envelope {
+	got := map[string]proto.Envelope{}
+	ctx, cancel := context.WithTimeout(a.ctx, 3*time.Minute)
+	defer cancel()
+
+	err := c.Done(ctx, name, func(m proto.Envelope) error {
+		got[m.ID] = m
+		if len(got) == n {
+			cancel()
+		}
+		return nil
+	})
+	if err != nil {
+		a.t.Fatalf("done %s: %v", name, err)
+	}
+
+	return got
+}
+
+// check checks the five results of send.
+func (a *fixture) check(got map[string]proto.Envelope) {
+	t := a.t
+
+	// audio
+	ar, err := got["a1"].Audio()
+	if err != nil || ar.Error != nil || len(ar.Renditions) != 2 {
+		t.Errorf("audio: %+v %v", ar, err)
+	}
+	a.stored("nats/audio/master.m3u8")
+
+	// stream and video
+	sr, err := got["s1"].Video()
+	if err != nil || sr.Error != nil || len(sr.Profiles) != 1 {
+		t.Errorf("stream: %+v %v", sr, err)
+	}
+
+	vr, err := got["v1"].Video()
+	if err != nil || vr.Error != nil || vr.Output != "nats/video/video.mp4" {
+		t.Errorf("video: %+v %v", vr, err)
+	}
+	a.stored("nats/video/video.mp4")
+
+	// images
+	ir, err := got["i1"].Images()
+	if err != nil || ir.Error != nil || len(ir.Tasks) != 2 {
+		t.Errorf("images: %+v %v", ir, err)
+	}
+
+	// the failure
+	e := got["i2"].Failure()
+	if e == nil || e.Code != code.SourceUnavailable {
+		t.Errorf("bad images: %v", e)
+	}
+
+	// a result of another kind is refused
+	_, err = got["a1"].Images()
+	if err == nil {
+		t.Error("audio read as images")
 	}
 }

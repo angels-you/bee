@@ -13,11 +13,10 @@ import (
 	"github.com/angels-you/bee/internal/servers/nats"
 	"github.com/angels-you/bee/internal/testmedia/testbee"
 	"github.com/angels-you/bee/pkg/proto"
-	"github.com/angels-you/bee/pkg/types/images"
 )
 
 // TestConsumer — a job published on its subject, the result read from the
-// results stream; a message that is not a job is a failure with its id.
+// results stream; an invalid job is a failure with its id, garbage is dropped.
 func TestConsumer(t *testing.T) {
 	bench := &testbee.Bench{T: t}
 	bench.Start()
@@ -36,7 +35,7 @@ func TestConsumer(t *testing.T) {
 	}
 	go cons.Run(ctx, bench.Engine, 2, time.Second)
 
-	// a raw publisher
+	// a raw publisher and a raw reader of the results
 	nc, err := natsgo.Connect(cfg.URL)
 	if err != nil {
 		t.Fatal(err)
@@ -45,30 +44,62 @@ func TestConsumer(t *testing.T) {
 	js, _ := jetstream.New(nc)
 	names := cfg.Names()
 
-	// a job
+	results, err := js.OrderedConsumer(ctx, names.DoneStream(), jetstream.OrderedConsumerConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// a job, a job that is not valid, garbage and an unknown kind
 	job, _ := json.Marshal(bench.Images("n1", "nats/1"))
-	_, err = js.Publish(ctx, names.JobsSubject(proto.Images), job)
-	if err != nil {
-		t.Fatal(err)
+	messages := []string{
+		`{"kind":"images","job":` + string(job) + `}`,
+		`{"kind":"audio","job":{"id":"n2","input":5}}`,
+		`not json`,
+		`{"kind":"photo","job":{"id":"n3"}}`,
+		`{"kind":"audio","job":{"input":"x"}}`,
+	}
+	for _, m := range messages {
+		_, err = js.Publish(ctx, names.JobsSubject(), []byte(m))
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	data := read(t, js, names, proto.Images, "n1")
-	var res images.Result
-	json.Unmarshal(data, &res)
-	if res.Error != nil || len(res.Tasks) != 2 {
-		t.Errorf("result %s", data)
+	// two results: the done job and the invalid one; the rest is terminated
+	got := map[string]proto.Envelope{}
+	for range 2 {
+		msg, err := results.Next(jetstream.FetchMaxWait(time.Minute))
+		if err != nil {
+			t.Fatalf("no result: %v (got %v)", err, got)
+		}
+
+		var m proto.Envelope
+		json.Unmarshal(msg.Data(), &m)
+		got[m.ID] = m
 	}
 
-	// not a job, with an id
-	_, err = js.Publish(ctx, names.JobsSubject(proto.Audio), []byte(`{"id":"n2","input":5}`))
-	if err != nil {
-		t.Fatal(err)
+	res, err := got["n1"].Images()
+	switch {
+	case err != nil:
+		t.Errorf("n1: %v", err)
+	case res.Error != nil, len(res.Tasks) != 2:
+		t.Errorf("n1 result %+v", res)
 	}
 
-	data = read(t, js, names, proto.Audio, "n2")
-	json.Unmarshal(data, &res)
-	if res.Error == nil || res.Error.Code != "INVALID_JOB" {
-		t.Errorf("bad job result %s", data)
+	bad := got["n2"]
+	switch {
+	case bad.Kind != proto.Audio:
+		t.Errorf("n2 kind %q", bad.Kind)
+	case bad.Failure() == nil:
+		t.Error("n2 has no error")
+	case bad.Failure().Code != "INVALID_JOB":
+		t.Errorf("n2 code %s", bad.Failure().Code)
+	}
+
+	// nothing more: the garbage was terminated
+	_, err = results.Next(jetstream.FetchMaxWait(2 * time.Second))
+	if err == nil {
+		t.Error("a result for a message that is not a job")
 	}
 
 	// ready
@@ -76,24 +107,4 @@ func TestConsumer(t *testing.T) {
 	if err != nil {
 		t.Errorf("ready: %v", err)
 	}
-}
-
-// read waits for the result of job id of kind.
-func read(t *testing.T, js jetstream.JetStream, names proto.Names, kind proto.Kind, id string) []byte {
-	t.Helper()
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-
-	cons, err := js.OrderedConsumer(ctx, names.DoneStream(), jetstream.OrderedConsumerConfig{FilterSubjects: []string{names.DoneSubject(kind, id)}})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	msg, err := cons.Next(jetstream.FetchMaxWait(time.Minute))
-	if err != nil {
-		t.Fatalf("no result of %s: %v", id, err)
-	}
-
-	return msg.Data()
 }
