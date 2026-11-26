@@ -71,7 +71,7 @@ func (a *Client) Close() error {
 // GenerateAudio runs an audio job.
 func (a *Client) GenerateAudio(ctx context.Context, j audio.Job) (audio.Result, error) {
 	var res audio.Result
-	err := a.call(ctx, proto.Audio, j.ID, j, &res)
+	err := a.call(ctx, proto.Audio, j.ID, j.Meta, j, &res)
 
 	return res, err
 }
@@ -79,7 +79,7 @@ func (a *Client) GenerateAudio(ctx context.Context, j audio.Job) (audio.Result, 
 // GenerateStream runs an HLS job.
 func (a *Client) GenerateStream(ctx context.Context, j video.StreamJob) (video.Result, error) {
 	var res video.Result
-	err := a.call(ctx, proto.Stream, j.ID, j, &res)
+	err := a.call(ctx, proto.Stream, j.ID, j.Meta, j, &res)
 
 	return res, err
 }
@@ -87,7 +87,7 @@ func (a *Client) GenerateStream(ctx context.Context, j video.StreamJob) (video.R
 // GenerateVideo runs an MP4 job.
 func (a *Client) GenerateVideo(ctx context.Context, j video.VideoJob) (video.Result, error) {
 	var res video.Result
-	err := a.call(ctx, proto.Video, j.ID, j, &res)
+	err := a.call(ctx, proto.Video, j.ID, j.Meta, j, &res)
 
 	return res, err
 }
@@ -95,16 +95,16 @@ func (a *Client) GenerateVideo(ctx context.Context, j video.VideoJob) (video.Res
 // GenerateImages runs an images job.
 func (a *Client) GenerateImages(ctx context.Context, j images.Job) (images.Result, error) {
 	var res images.Result
-	err := a.call(ctx, proto.Images, j.ID, j, &res)
+	err := a.call(ctx, proto.Images, j.ID, j.Meta, j, &res)
 
 	return res, err
 }
 
 // call sends job to the method of kind and reads the result into res.
-func (a *Client) call(ctx context.Context, kind proto.Kind, id any, job, res any) error {
+func (a *Client) call(ctx context.Context, kind proto.Kind, id any, meta map[string]any, job, res any) error {
 	data, err := json.Marshal(job)
 	if err != nil {
-		return a.fail(res, id, code.New(code.InvalidJob, "job json", err))
+		return a.fail(res, id, meta, code.New(code.InvalidJob, "job json", err))
 	}
 
 	// the token
@@ -116,13 +116,13 @@ func (a *Client) call(ctx context.Context, kind proto.Kind, id any, job, res any
 	var trailer metadata.MD
 	out, err := a.invoke(ctx, kind, &proto.Job{Json: data}, grpc.Trailer(&trailer))
 	if err != nil {
-		return a.fail(res, id, a.error(err, trailer))
+		return a.fail(res, id, meta, a.error(err, trailer))
 	}
 
 	// the result
 	err = tools.Decode(out.GetJson(), res)
 	if err != nil {
-		return a.fail(res, id, code.New(code.InternalTemporaryError, "bee grpc: unreadable result", err))
+		return a.fail(res, id, meta, code.New(code.InternalTemporaryError, "bee grpc: unreadable result", err))
 	}
 
 	return nil
@@ -165,7 +165,7 @@ func (a *Client) error(err error, trailer metadata.MD) *code.Error {
 }
 
 // fail fills res as a failure and returns e.
-func (a *Client) fail(res any, id any, e *code.Error) error {
-	proto.Failure(res, id, e)
+func (a *Client) fail(res any, id any, meta map[string]any, e *code.Error) error {
+	proto.Failure(res, id, meta, e)
 	return e
 }

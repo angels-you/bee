@@ -8,14 +8,14 @@ import (
 )
 
 // Failure fills res (a pointer to audio.Result, video.Result or
-// images.Result) as the result of a failed job: its id and e, nothing
-// else. Clients use it for failures they see themselves (transport,
+// images.Result) as the result of a failed job: its id, its meta and e. Clients use it for failures they see themselves (transport,
 // status without a result).
-func Failure(res any, id any, e *code.Error) {
+func Failure(res any, id any, meta map[string]any, e *code.Error) {
 	data, _ := json.Marshal(struct {
-		ID    any         `json:"id"`
-		Error *code.Error `json:"error"`
-	}{id, e})
+		ID    any            `json:"id"`
+		Meta  map[string]any `json:"meta,omitempty"`
+		Error *code.Error    `json:"error"`
+	}{id, meta, e})
 
 	tools.Decode(data, res)
 }

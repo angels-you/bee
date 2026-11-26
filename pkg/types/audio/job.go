@@ -17,8 +17,7 @@ import (
 // Result keys (Output, Wave, Metadata, Analysis) are chosen by the client: they
 // are keys in the bee storage (not a bucket and not an endpoint). Output is
 // required, the rest are not: a set key gets its result published there, an
-// empty one is skipped. If a master playlist already exists at Output, the
-// job is rejected: a rerun needs new keys.
+// empty one is skipped. bee writes over whatever lies at the keys.
 //
 // Key is an optional AES-128 track key: with it every HLS segment is
 // encrypted, without it HLS is published in the clear; it is never logged

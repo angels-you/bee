@@ -146,6 +146,7 @@ func (a *fixture) run(c client) {
 	// a failed job: the result and the error carry the code
 	bad := a.bench.Images("i2", "e2e/bad")
 	bad.Input = a.bench.URL("missing.tif")
+	bad.Meta = map[string]any{"user": "u1"}
 	res, err := c.GenerateImages(ctx, bad)
 	switch {
 	case code.As(err) == nil:
@@ -155,7 +156,9 @@ func (a *fixture) run(c client) {
 	case res.Error == nil:
 		t.Error("no error in the result")
 	case res.ID != "i2":
-		t.Errorf("failed result id %q", res.ID)
+		t.Errorf("failed result id %v", res.ID)
+	case res.Meta["user"] != "u1":
+		t.Errorf("failed result meta %v", res.Meta)
 	}
 
 	// a rerun of a done job: it runs again over the same keys
