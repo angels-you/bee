@@ -7,7 +7,7 @@ import "errors"
 type Tools struct {
 	FFmpeg     string `env:"FFMPEG"`     // audio and video
 	FFprobe    string `env:"FFPROBE"`    // audio and video
-	Fpcalc     string `env:"FPCALC"`     // chromaprint for audio fingerprint; empty means none
+	Fpcalc     string `env:"FPCALC"`     // chromaprint for audio fingerprint; not in PATH: fingerprint is off
 	Vips       string `env:"VIPS"`       // images
 	VipsHeader string `env:"VIPSHEADER"` // images
 }

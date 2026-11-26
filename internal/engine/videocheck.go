@@ -529,7 +529,7 @@ func (a *videoCheck) checkThumbnail(field string, t *job.Thumbnail) *code.Error 
 	case t.Format != job.ImageJPEG && t.Format != job.ImagePNG && t.Format != job.ImageWebP && t.Format != job.ImageAVIF:
 		return code.New(code.UnsupportedCodec, field+": format must be jpg, png, webp or avif", nil)
 	case t.Quality < 1 || t.Quality > 100:
-		return code.New(code.InvalidJob, field+": quality must be within 0..100", nil)
+		return code.New(code.InvalidJob, field+": quality must be within 1..100", nil)
 	case !a.seconds(t.Position):
 		return code.New(code.InvalidJob, field+": position must be a non-negative number of seconds", nil)
 	case t.Width < 0 || t.Width > a.cfg.Video.MaxDimension:
