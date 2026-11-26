@@ -20,7 +20,7 @@ type Images struct {
 	AvifEffort int `env:"AVIF_EFFORT"` // усилие кодера avif, 0..9: выше — медленнее и меньше
 }
 
-// defaults — значения из рабочего gin
+// defaults — проверенные в работе значения
 func (a *Images) defaults() {
 	a.Timeout = 2 * time.Minute
 	a.MaxSourceMB = 50

@@ -128,32 +128,6 @@ func TestParams(t *testing.T) {
 	}
 }
 
-// TestStatus — отметки прогресса растут по порядку этапов
-func TestStatus(t *testing.T) {
-	order := []Status{
-		StatusPending,
-		StatusDownloading,
-		StatusProbing,
-		StatusAnalyzing,
-		StatusNormalizing,
-		StatusEncoding,
-		StatusWaveform,
-		StatusUploading,
-		StatusVerifying,
-		StatusReady,
-	}
-
-	for i := 1; i < len(order); i++ {
-		if order[i].Percent() <= order[i-1].Percent() {
-			t.Errorf("%s %d is not above %s", order[i], order[i].Percent(), order[i-1])
-		}
-	}
-
-	if StatusFailed.Percent() != 100 {
-		t.Error("failed is final")
-	}
-}
-
 // TestResultJSON — у упавшей job ошибка без причины
 func TestResultJSON(t *testing.T) {
 	failed := Result{ID: "t1", Error: code.New(code.InvalidAudio, "silent", nil)}

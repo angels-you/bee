@@ -205,3 +205,12 @@ func (a *Config) transports() (n int) {
 
 	return
 }
+
+// Defaults — конфиг только с дефолтами, без env и без проверки: основа
+// для тестов, хранилище и транспорты не заданы
+func Defaults() *Config {
+	a := &Config{}
+	a.defaults()
+
+	return a
+}

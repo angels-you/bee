@@ -57,7 +57,7 @@ func (a *NATS) Enabled() bool {
 	return a.URL != ""
 }
 
-// defaults — значения из рабочих reels и gin
+// defaults — проверенные в работе значения
 func (a *NATS) defaults() {
 	a.Name = "bee"
 	a.AckWait = time.Minute

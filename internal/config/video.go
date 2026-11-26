@@ -24,7 +24,7 @@ type Video struct {
 	TruePeak       float64 `env:"TRUE_PEAK"`       // потолок true peak options.normalize, -9..0 dBTP
 }
 
-// defaults — значения из рабочего reels
+// defaults — проверенные в работе значения
 func (a *Video) defaults() {
 	a.Timeout = 10 * time.Minute
 	a.MaxSourceMB = 500

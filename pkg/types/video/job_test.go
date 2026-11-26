@@ -80,27 +80,27 @@ func (a ladder) names() string {
 
 // TestLadders — the ladders in their order, each preset a fresh value.
 func TestLadders(t *testing.T) {
-	got := ladder(ReelsMobile()).names()
+	got := ladder(VerticalMobile()).names()
 	if got != "360p,720p" {
 		t.Errorf("mobile %s", got)
 	}
-	got = ladder(ReelsEconomy()).names()
+	got = ladder(VerticalEconomy()).names()
 	if got != "240p,480p,720p" {
 		t.Errorf("economy %s", got)
 	}
-	got = ladder(ReelsStandard()).names()
+	got = ladder(VerticalStandard()).names()
 	if got != "360p,720p,1080p" {
 		t.Errorf("standard %s", got)
 	}
-	got = ladder(ReelsFull()).names()
+	got = ladder(VerticalFull()).names()
 	if got != "240p,360p,480p,720p,1080p" {
 		t.Errorf("full %s", got)
 	}
 
 	// a changed copy does not change the next one
-	mobile := ReelsMobile()
+	mobile := VerticalMobile()
 	mobile[0].Width = 1
-	if ReelsMobile()[0].Width != 360 {
+	if VerticalMobile()[0].Width != 360 {
 		t.Error("presets share their values")
 	}
 }
@@ -132,8 +132,8 @@ func TestJSON(t *testing.T) {
 		ID:       "j1",
 		Input:    "https://s3.example.com/in.mov",
 		Output:   "video/1/index.m3u8",
-		Options:  ReelsOptions(),
-		Profiles: ReelsMobile(),
+		Options:  VerticalOptions(),
+		Profiles: VerticalMobile(),
 		HLS:      HLS{Key: []byte("0123456789abcdef"), KeyURI: "skd://1"},
 	}
 	js, err := json.Marshal(s)

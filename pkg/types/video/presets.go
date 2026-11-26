@@ -10,8 +10,8 @@ func DefaultHLS() HLS {
 	return HLS{Format: HLSFMP4, SegmentDuration: 2, Keyframe: 2}
 }
 
-// ReelsOptions uses a centered 9:16 crop with no upscaling.
-func ReelsOptions() Options {
+// VerticalOptions uses a centered 9:16 crop with no upscaling.
+func VerticalOptions() Options {
 	return Options{Vertical: true, Resize: ResizeCover, Gravity: GravityCenter}
 }
 
@@ -32,7 +32,7 @@ const (
 )
 
 // Preset returns a fresh profile value, so callers can safely modify it.
-// The bitrate ladder is a starting point; validate visual quality on real reels.
+// The bitrate ladder is a starting point; validate visual quality on real videos.
 func Preset(q Quality) (Profile, bool) {
 	p := Profile{
 		Name: string(q), FPS: 30,
@@ -67,18 +67,18 @@ func Preset(q Quality) (Profile, bool) {
 	return p, true
 }
 
-// ReelsMobile: 360p + 720p. Recommended initial ladder for low storage/CPU.
+// VerticalMobile: 360p + 720p. Recommended initial ladder for low storage/CPU.
 // ~18.93 MB/min stored for both renditions; a viewer downloads one at a time.
-func ReelsMobile() []Profile { return profiles(Quality360p, Quality720p) }
+func VerticalMobile() []Profile { return profiles(Quality360p, Quality720p) }
 
-// ReelsStandard: 360p + 720p + 1080p. ~46.14 MB/min stored.
-func ReelsStandard() []Profile { return profiles(Quality360p, Quality720p, Quality1080p) }
+// VerticalStandard: 360p + 720p + 1080p. ~46.14 MB/min stored.
+func VerticalStandard() []Profile { return profiles(Quality360p, Quality720p, Quality1080p) }
 
-// ReelsEconomy: 240p + 480p + 720p. ~24.29 MB/min stored.
-func ReelsEconomy() []Profile { return profiles(Quality240p, Quality480p, Quality720p) }
+// VerticalEconomy: 240p + 480p + 720p. ~24.29 MB/min stored.
+func VerticalEconomy() []Profile { return profiles(Quality240p, Quality480p, Quality720p) }
 
-// ReelsFull: 240p + 360p + 480p + 720p + 1080p. ~55.97 MB/min stored.
-func ReelsFull() []Profile {
+// VerticalFull: 240p + 360p + 480p + 720p + 1080p. ~55.97 MB/min stored.
+func VerticalFull() []Profile {
 	return profiles(Quality240p, Quality360p, Quality480p, Quality720p, Quality1080p)
 }
 
@@ -88,7 +88,7 @@ func profiles(qualities ...Quality) []Profile {
 	for _, q := range qualities {
 		p, ok := Preset(q)
 		if !ok {
-			panic("unknown Reels preset: " + string(q))
+			panic("unknown vertical preset: " + string(q))
 		}
 		out = append(out, p)
 	}

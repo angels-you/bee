@@ -30,7 +30,7 @@ type Audio struct {
 	SilenceSec     float64 `env:"SILENCE_SEC"`     // самая короткая тишина в отчёте, секунд
 }
 
-// defaults — значения из рабочего bee
+// defaults — проверенные в работе значения
 func (a *Audio) defaults() {
 	a.Timeout = 5 * time.Minute
 	a.MaxSourceMB = 500
