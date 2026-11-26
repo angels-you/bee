@@ -1,0 +1,9 @@
+source/
+.git/
+.github/
+docs/
+examples/
+out/
+*.md
+.DS_Store
+rules.md

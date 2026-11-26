@@ -123,9 +123,10 @@ func (a Tools) Normalize(ctx context.Context, src string, info Info, dst string)
 	// a box the size of the source: no resize
 	side := strconv.Itoa(max(info.Width, info.Height))
 
-	// decode
+	// decode; --export-profile: the name of vips 8.16 and older, still
+	// accepted by 8.17+ (there --output-profile)
 	_, err := a.run(ctx, a.Vips, "thumbnail", src, dst+"[keep=none]", side, "--height", side,
-		"--size", "down", "--output-profile", "srgb", "--fail-on", "error")
+		"--size", "down", "--export-profile", "srgb", "--fail-on", "error")
 	if err != nil {
 		if ctx.Err() != nil {
 			return Source{}, ctx.Err()
