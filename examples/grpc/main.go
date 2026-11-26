@@ -33,12 +33,12 @@ func main() {
 
 	// HLS renditions, a waveform and the metadata; the keys must be new
 	job := audio.Job{
-		ID:       "track-1",
-		Input:    *input,
-		Output:   "tracks/1/master.m3u8",
-		WavePath: "tracks/1/wave.json",
-		MetaPath: "tracks/1/meta.json",
-		Options:  audio.Options{Normalize: true},
+		ID:           "track-1",
+		Input:        *input,
+		PlaylistPath: "tracks/1/master.m3u8",
+		WavePath:     "tracks/1/wave.json",
+		InfoPath:     "tracks/1/meta.json",
+		Options:      audio.Options{Normalize: true},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)

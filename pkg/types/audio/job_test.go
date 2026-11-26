@@ -16,9 +16,9 @@ func (a fixture) job() Job {
 	return Job{
 		ID:           "t1",
 		Input:        "https://example.com/a.wav?X-Amz-Signature=1",
-		Output:       "/tracks/1/master.m3u8",
+		PlaylistPath: "/tracks/1/master.m3u8",
 		WavePath:     "tracks/1/wave.json",
-		MetaPath:     "tracks/1/meta.json",
+		InfoPath:     "tracks/1/meta.json",
 		AnalysisPath: "tracks/1/analysis.json",
 	}
 }
@@ -32,12 +32,12 @@ func TestValidate(t *testing.T) {
 	switch {
 	case e != nil:
 		t.Fatal(e)
-	case j.Output != "tracks/1/master.m3u8":
-		t.Errorf("leading slash must be trimmed: %s", j.Output)
+	case j.PlaylistPath != "tracks/1/master.m3u8":
+		t.Errorf("leading slash must be trimmed: %s", j.PlaylistPath)
 	}
 
 	// required only
-	j = Job{ID: "t2", Input: "https://example.com/a.wav", Output: "a.m3u8"}
+	j = Job{ID: "t2", Input: "https://example.com/a.wav", PlaylistPath: "a.m3u8"}
 	e = j.Validate()
 	if e != nil {
 		t.Errorf("minimal job refused: %v", e)
@@ -65,11 +65,11 @@ func TestRefuse(t *testing.T) {
 		"line break id":  {func(j *Job) { j.ID = "a\nb" }, code.InvalidJob},
 		"no input":       {func(j *Job) { j.Input = "" }, code.InvalidJob},
 		"input no host":  {func(j *Job) { j.Input = "a.wav" }, code.InvalidJob},
-		"no output":      {func(j *Job) { j.Output = "" }, code.InvalidPath},
-		"output not hls": {func(j *Job) { j.Output = "a/master.mp4" }, code.InvalidPath},
-		"dirty output":   {func(j *Job) { j.Output = "a/../master.m3u8" }, code.InvalidPath},
+		"no output":      {func(j *Job) { j.PlaylistPath = "" }, code.InvalidPath},
+		"output not hls": {func(j *Job) { j.PlaylistPath = "a/master.mp4" }, code.InvalidPath},
+		"dirty output":   {func(j *Job) { j.PlaylistPath = "a/../master.m3u8" }, code.InvalidPath},
 		"dirty wave":     {func(j *Job) { j.WavePath = "a//wave.json" }, code.InvalidPath},
-		"same keys":      {func(j *Job) { j.MetaPath = j.WavePath }, code.InvalidPath},
+		"same keys":      {func(j *Job) { j.InfoPath = j.WavePath }, code.InvalidPath},
 		"short key":      {func(j *Job) { j.Key = []byte("short"); j.KeyURI = "skd://1" }, code.InvalidJob},
 		"key no uri":     {func(j *Job) { j.Key = []byte("0123456789abcdef") }, code.InvalidJob},
 		"key bad uri":    {func(j *Job) { j.Key = []byte("0123456789abcdef"); j.KeyURI = "skd://\"1" }, code.InvalidJob},

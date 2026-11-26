@@ -1,9 +1,9 @@
 package audio
 
-// Metadata is the technical data and tags of the original from ffprobe.
+// Info is the technical data and tags of the original from ffprobe.
 // Normalized fields are filled only when the tag exists; the raw tags are
 // in Tags (lowercase keys, values up to 1024 runes, at most 64)
-type Metadata struct {
+type Info struct {
 	DurationMs    int64  `json:"duration_ms"`
 	Size          int64  `json:"size"`
 	Format        string `json:"format"`                   // container: mp3, flac, wav, mov,mp4,m4a,3gp,3g2,mj2, ogg

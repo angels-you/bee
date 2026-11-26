@@ -132,7 +132,7 @@ Typed protobuf messages are postponed. Calls are unary and synchronous.
 
 Over gRPC, a failed job has no result body: the Go client fills `id`,
 `meta` (from the job it sent) and `error`. Partial data, for example audio
-`metadata`, comes only over HTTP and NATS.
+`info`, comes only over HTTP and NATS.
 
 | gRPC code | bee codes |
 |---|---|

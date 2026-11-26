@@ -60,7 +60,7 @@ c := &beehttp.Client{URL: "http://bee:8080", Token: os.Getenv("BEE_TOKEN")}
 res, err := c.GenerateAudio(ctx, audio.Job{
 	ID:     "track-1",
 	Input:  "https://cdn.example.com/upload/track.mp3",
-	Output: "tracks/1/master.m3u8",
+	PlaylistPath: "tracks/1/master.m3u8",
 	WavePath: "tracks/1/wave.json",
 })
 if err != nil {

@@ -14,8 +14,8 @@ import (
 // Job is one track. Input is the url of the original (presigned GET or any
 // public https), logged without the query.
 //
-// Result keys (Output, WavePath, MetaPath, AnalysisPath) are chosen by the client: they
-// are keys in the bee storage (not a bucket and not an endpoint). Output is
+// Result keys (PlaylistPath, WavePath, InfoPath, AnalysisPath) are chosen by the client: they
+// are keys in the bee storage (not a bucket and not an endpoint). PlaylistPath is
 // required, the rest are not: a set key gets its result published there, an
 // empty one is skipped. bee writes over whatever lies at the keys.
 //
@@ -27,13 +27,13 @@ type Job struct {
 	Meta  map[string]any `json:"meta,omitempty"` // data of the caller, returned untouched in the result
 	Input string         `json:"input"`          // url of the original
 
-	// Output is the master playlist key (.m3u8); each rendition lives next
+	// PlaylistPath is the master playlist key (.m3u8); each rendition lives next
 	// to it in a folder named after its bitrate in kbit/s:
 	// <output folder>/<kbit>/index.m3u8, init.mp4, seg_NNNN.m4s
-	Output string `json:"output"`
+	PlaylistPath string `json:"playlist_path"`
 
 	WavePath     string `json:"wave_path,omitempty"`     // waveform json key; empty — no waveform (and no Result.Waveform)
-	MetaPath     string `json:"meta_path,omitempty"`     // track metadata json key; empty — not published
+	InfoPath     string `json:"info_path,omitempty"`     // track metadata json key; empty — not published
 	AnalysisPath string `json:"analysis_path,omitempty"` // analysis json key; empty — not published
 
 	Key    []byte `json:"key,omitempty"`     // empty (clear HLS) or exactly 16 bytes; base64 in json
@@ -96,23 +96,23 @@ func (a *Job) Validate() *code.Error {
 	return a.Options.Validate()
 }
 
-// validateKeys checks that Output is set and is .m3u8, the other keys are
+// validateKeys checks that PlaylistPath is set and is .m3u8, the other keys are
 // optional; all are clean and distinct
 func (a *Job) validateKeys() *code.Error {
 	taken := map[string]string{}
 
 	// master playlist is required
-	if a.Output == "" {
-		return code.New(code.InvalidPath, "output is required", nil)
+	if a.PlaylistPath == "" {
+		return code.New(code.InvalidPath, "playlist_path is required", nil)
 	}
 
-	e := a.cleanKey("output", &a.Output, taken)
+	e := a.cleanKey("playlist_path", &a.PlaylistPath, taken)
 	if e != nil {
 		return e
 	}
 
-	if path.Ext(a.Output) != ".m3u8" {
-		return code.New(code.InvalidPath, "output must end in .m3u8", nil)
+	if path.Ext(a.PlaylistPath) != ".m3u8" {
+		return code.New(code.InvalidPath, "playlist_path must end in .m3u8", nil)
 	}
 
 	// waveform
@@ -122,7 +122,7 @@ func (a *Job) validateKeys() *code.Error {
 	}
 
 	// metadata
-	e = a.cleanKey("meta_path", &a.MetaPath, taken)
+	e = a.cleanKey("info_path", &a.InfoPath, taken)
 	if e != nil {
 		return e
 	}

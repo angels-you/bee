@@ -150,7 +150,7 @@ func main() {
 		ID:     1001,
 		Meta:   map[string]any{"album": 7},
 		Input:  "https://cdn.example.com/upload/track.mp3",
-		Output: "tracks/1001/master.m3u8",
+		PlaylistPath: "tracks/1001/master.m3u8",
 		WavePath: "tracks/1001/wave.json",
 	})
 	if err != nil {

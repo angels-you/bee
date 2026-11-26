@@ -10,7 +10,7 @@
 //	res, err := c.GenerateAudio(ctx, audio.Job{
 //		ID:     "track-1",
 //		Input:  presignedURL,
-//		Output: "tracks/1/master.m3u8",
+//		PlaylistPath: "tracks/1/master.m3u8",
 //		WavePath:   "tracks/1/wave.json",
 //	})
 //

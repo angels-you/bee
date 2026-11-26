@@ -28,7 +28,7 @@ type audioRun struct {
 	hls *encrypt.HLS // segment encryption; nil without a key
 
 	source     string // downloaded source
-	meta       audio.Metadata
+	meta       audio.Info
 	analysis   audiotool.Analysis
 	gain       float64
 	renditions []audioRendition // in Options.Renditions order
@@ -67,8 +67,8 @@ func (a *Engine) Audio(ctx context.Context, j audio.Job) (audio.Result, error) {
 	if e != nil {
 		return r.fail(e)
 	}
-	r.output = r.job.Output
-	r.log = r.log.With("output", r.job.Output)
+	r.output = r.job.PlaylistPath
+	r.log = r.log.With("output", r.job.PlaylistPath)
 
 	// encryption
 	if len(r.job.Key) > 0 {
@@ -140,9 +140,9 @@ func (a *Engine) checkAudio(j *audio.Job) *code.Error {
 	}
 
 	// each variant folder next to master belongs to HLS
-	others := map[string]string{"wave_path": j.WavePath, "meta_path": j.MetaPath, "analysis_path": j.AnalysisPath}
+	others := map[string]string{"wave_path": j.WavePath, "info_path": j.InfoPath, "analysis_path": j.AnalysisPath}
 	for _, kbit := range o.Renditions {
-		folder := path.Join(path.Dir(j.Output), strconv.Itoa(kbit)) + "/"
+		folder := path.Join(path.Dir(j.PlaylistPath), strconv.Itoa(kbit)) + "/"
 
 		for name, key := range others {
 			if strings.HasPrefix(key, folder) {
@@ -275,7 +275,7 @@ func (a *audioRun) probe(ctx context.Context) *code.Error {
 	}
 
 	a.meta = m
-	a.res.Metadata = &a.meta
+	a.res.Info = &a.meta
 
 	// quality notes about the source
 	lossy := false
@@ -485,7 +485,7 @@ func (a *audioRun) rendition(ctx context.Context, dir string, kbit int) *code.Er
 		kbit:     kbit,
 		folder:   folder,
 		dir:      filepath.Join(dir, folder),
-		key:      path.Join(path.Dir(a.job.Output), folder),
+		key:      path.Join(path.Dir(a.job.PlaylistPath), folder),
 		playlist: pl,
 		track:    newTrack(),
 	})
@@ -585,7 +585,7 @@ func (a *audioRun) upload(ctx context.Context) *code.Error {
 	}
 
 	// master last: whoever sees it sees the complete set
-	master := upload{key: a.job.Output, data: []byte(a.engine.audio.Master(variants))}
+	master := upload{key: a.job.PlaylistPath, data: []byte(a.engine.audio.Master(variants))}
 	e = a.putAll(ctx, []upload{master})
 	if e != nil {
 		return e
@@ -649,18 +649,18 @@ func (a *audioRun) sideFiles() ([]upload, *code.Error) {
 	var side []upload
 
 	// metadata
-	if a.job.MetaPath != "" {
+	if a.job.InfoPath != "" {
 		meta := struct {
 			SHA256     string            `json:"sha256"`
 			Renditions []audio.Rendition `json:"renditions"`
-			Metadata   *audio.Metadata   `json:"metadata"`
+			Info       *audio.Info       `json:"info"`
 		}{a.res.SHA256, a.res.Renditions, &a.meta}
 
 		data, err := json.Marshal(meta)
 		if err != nil {
 			return nil, code.New(code.InternalTemporaryError, "metadata json", err)
 		}
-		side = append(side, upload{key: a.job.MetaPath, data: data})
+		side = append(side, upload{key: a.job.InfoPath, data: data})
 	}
 
 	// analysis: only what is safe to publish
@@ -685,7 +685,7 @@ func (a *audioRun) sideFiles() ([]upload, *code.Error) {
 // variant the media playlist, init, first and last segment, and every
 // json the job asked for
 func (a *audioRun) verify(ctx context.Context) *code.Error {
-	required := []string{a.job.Output}
+	required := []string{a.job.PlaylistPath}
 
 	for _, r := range a.renditions {
 		segments := r.playlist.Segments
@@ -697,7 +697,7 @@ func (a *audioRun) verify(ctx context.Context) *code.Error {
 		)
 	}
 
-	for _, key := range []string{a.job.WavePath, a.job.MetaPath, a.job.AnalysisPath} {
+	for _, key := range []string{a.job.WavePath, a.job.InfoPath, a.job.AnalysisPath} {
 		if key != "" {
 			required = append(required, key)
 		}
@@ -722,9 +722,9 @@ func (a *audioRun) done() (audio.Result, error) {
 	a.res.Metrics["total"] = a.res.Elapsed
 
 	// where the results lie
-	a.res.Output = a.job.Output
+	a.res.PlaylistPath = a.job.PlaylistPath
 	a.res.WavePath = a.job.WavePath
-	a.res.MetaPath = a.job.MetaPath
+	a.res.InfoPath = a.job.InfoPath
 	a.res.AnalysisPath = a.job.AnalysisPath
 
 	a.work.done("renditions", len(a.res.Renditions))

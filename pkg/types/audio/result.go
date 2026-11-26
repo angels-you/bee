@@ -3,7 +3,7 @@ package audio
 import "github.com/angels-you/bee/pkg/types/code"
 
 // Result is the result of one track: what bee measured and where it wrote
-// it (Output, WavePath, MetaPath, AnalysisPath: the keys of the job, as
+// it (PlaylistPath, WavePath, InfoPath, AnalysisPath: the keys of the job, as
 // saved). A failed job has Error: none of its results count, whatever is
 // already in storage
 type Result struct {
@@ -11,9 +11,9 @@ type Result struct {
 	Meta    map[string]any `json:"meta,omitempty"` // the job meta as sent
 	Elapsed int64          `json:"elapsed"`        // milliseconds for the whole job
 
-	Output       string `json:"output,omitempty"`        // master playlist key, as saved
+	PlaylistPath string `json:"playlist_path,omitempty"` // master playlist key, as saved
 	WavePath     string `json:"wave_path,omitempty"`     // waveform json key, as saved; empty — not made
-	MetaPath     string `json:"meta_path,omitempty"`     // track metadata json key, as saved; empty — not made
+	InfoPath     string `json:"info_path,omitempty"`     // track metadata json key, as saved; empty — not made
 	AnalysisPath string `json:"analysis_path,omitempty"` // analysis json key, as saved; empty — not made
 
 	SHA256     string `json:"sha256,omitempty"`      // of the original
@@ -34,7 +34,7 @@ type Result struct {
 
 	Metrics map[string]int64 `json:"metrics,omitempty"` // stage → milliseconds
 
-	Metadata    *Metadata    `json:"metadata,omitempty"`
+	Info        *Info        `json:"info,omitempty"`
 	Loudness    *Loudness    `json:"loudness,omitempty"`
 	Quality     *Quality     `json:"quality,omitempty"`
 	Fingerprint *Fingerprint `json:"fingerprint,omitempty"` // only in the response, never written to storage

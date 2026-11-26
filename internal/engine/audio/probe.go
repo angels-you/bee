@@ -11,8 +11,8 @@ import (
 	"strings"
 )
 
-// Metadata is the source data and tags: public job type
-type Metadata = types.Metadata
+// Info is the source data and tags: public job type
+type Info = types.Info
 
 // ffprobe -print_format json
 type probeOutput struct {
@@ -42,7 +42,7 @@ type probeOutput struct {
 
 // Probe — metadata of a local file. A file without an audio stream is
 // ErrNoAudio, a file ffprobe cannot read is ErrInvalid.
-func (t Tools) Probe(ctx context.Context, file string) (m Metadata, err error) {
+func (t Tools) Probe(ctx context.Context, file string) (m Info, err error) {
 	// run ffprobe
 	out, _, err := t.run(ctx, "", t.FFprobe, "-v", "error", "-print_format", "json",
 		"-show_format", "-show_streams", "-show_error", file)
@@ -187,7 +187,7 @@ func (t Tools) mergeTags(groups ...map[string]string) map[string]string {
 
 // Supported — the source codec (ffprobe codec_name) is one the pipeline
 // encodes from. A fixed property of bee, not a setting.
-func (t Tools) Supported(m *Metadata) bool {
+func (t Tools) Supported(m *Info) bool {
 	switch strings.ToLower(m.Codec) {
 	case "mp3", "flac", "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_f32le", "pcm_s16be", "pcm_s24be", "pcm_f32be", "pcm_u8", "aac", "alac", "vorbis", "opus", "wmav2", "mp2", "ac3":
 		return true
@@ -197,7 +197,7 @@ func (t Tools) Supported(m *Metadata) bool {
 
 // fillFromTags — normalized fields from the common tag names of ID3,
 // vorbis comments and mp4 atoms as ffprobe reports them.
-func (t Tools) fillFromTags(m *Metadata) {
+func (t Tools) fillFromTags(m *Info) {
 	// text fields
 	m.Title = t.tag(m, "title", "tit2")
 	m.Artist = t.tag(m, "artist", "tpe1")
@@ -232,7 +232,7 @@ func (t Tools) fillFromTags(m *Metadata) {
 }
 
 // tag — the value of the first of names present in the tags, or "".
-func (t Tools) tag(m *Metadata, names ...string) string {
+func (t Tools) tag(m *Info, names ...string) string {
 	for _, n := range names {
 		v, ok := m.Tags[n]
 		if ok {

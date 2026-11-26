@@ -59,7 +59,7 @@ func TestAudio(t *testing.T) {
 	ctx := context.Background()
 
 	j := f.bench.Audio("a1", "tracks/1")
-	j.MetaPath = "tracks/1/meta.json"
+	j.InfoPath = "tracks/1/meta.json"
 	j.AnalysisPath = "tracks/1/analysis.json"
 
 	res, err := f.bench.Engine.Audio(ctx, j)
@@ -83,14 +83,14 @@ func TestAudio(t *testing.T) {
 		t.Error("no size")
 	case res.Encrypted:
 		t.Error("plain job is encrypted")
-	case res.Metadata == nil:
-		t.Error("no metadata")
-	case res.Output != "tracks/1/master.m3u8":
-		t.Errorf("output %q", res.Output)
+	case res.Info == nil:
+		t.Error("no info")
+	case res.PlaylistPath != "tracks/1/master.m3u8":
+		t.Errorf("playlist path %q", res.PlaylistPath)
 	case res.WavePath != "tracks/1/wave.json":
 		t.Errorf("wave path %q", res.WavePath)
-	case res.MetaPath != "tracks/1/meta.json":
-		t.Errorf("meta path %q", res.MetaPath)
+	case res.InfoPath != "tracks/1/meta.json":
+		t.Errorf("info path %q", res.InfoPath)
 	case res.AnalysisPath != "tracks/1/analysis.json":
 		t.Errorf("analysis path %q", res.AnalysisPath)
 	case res.Loudness == nil:
