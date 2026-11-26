@@ -16,21 +16,25 @@ import (
 // the preview, the thumbnails). dir must exist; the rendition folders are
 // made here. The tools see only local files.
 func (a *Tools) Encode(ctx context.Context, p *Plan, dir string) error {
+	// the rendition folders (HLS only)
 	for _, r := range p.Renditions {
 		if r.Dir == "" {
 			continue
 		}
+
 		err := os.MkdirAll(filepath.Join(dir, r.Dir), 0o755)
 		if err != nil {
 			return err
 		}
 	}
 
+	// the arguments of the run
 	args, err := a.args(p)
 	if err != nil {
 		return err
 	}
 
+	// the one ffmpeg run
 	_, _, err = a.run(ctx, dir, a.FFmpeg, args...)
 	return err
 }
@@ -38,9 +42,11 @@ func (a *Tools) Encode(ctx context.Context, p *Plan, dir string) error {
 // args — the arguments of the run: the inputs, the graph, then every
 // output; output paths are relative to the directory of the run.
 func (a *Tools) args(p *Plan) ([]string, error) {
+	// the global flags and the threads of every encoder
 	args := []string{"-nostdin", "-hide_banner", "-nostats", "-loglevel", "error", "-y"}
 	threads := strconv.Itoa(a.Threads)
 
+	// the inputs, the watermark picture included
 	inputs, err := a.inputs(p, true)
 	if err != nil {
 		return nil, err
@@ -52,34 +58,45 @@ func (a *Tools) args(p *Plan) ([]string, error) {
 
 	// the renditions
 	for i, r := range p.Renditions {
+		// the streams of the rendition, no metadata or chapters of the source
 		args = append(args, "-map", fmt.Sprintf("[v%d]", i))
 		if p.HasSound {
 			args = append(args, "-map", fmt.Sprintf("[a%d]", i))
 		}
 		args = append(args, "-map_metadata", "-1", "-map_chapters", "-1")
+
+		// the encoders
 		args = append(args, a.videoArgs(p, r.Profile, p.keyint(r.Profile))...)
 		if p.HasSound {
 			args = append(args, a.soundArgs(r.Profile)...)
 		}
 		args = append(args, "-threads", threads)
 
+		// a single MP4
 		if p.HLS == nil {
 			args = append(args, "-movflags", "+faststart", "-f", "mp4", r.File)
 			continue
 		}
+
+		// an HLS rendition
 		args = append(args, a.hlsArgs(p.HLS, r)...)
 	}
 
 	// the preview: MP4, silent unless it asks for sound
 	if p.Clip != nil {
 		profile := p.Clip.Preview.Profile
+		sound := p.HasSound && p.Clip.Preview.Sound
+
+		// the streams of the preview
 		args = append(args, "-map", "[pv]")
-		if p.HasSound && p.Clip.Preview.Sound {
+		if sound {
 			args = append(args, "-map", "[pa]")
 		}
 		args = append(args, "-map_metadata", "-1", "-map_chapters", "-1")
+
+		// the encoders and the muxer
 		args = append(args, a.videoArgs(p, profile, 0)...)
-		if p.HasSound && p.Clip.Preview.Sound {
+		if sound {
 			args = append(args, a.soundArgs(profile)...)
 		}
 		args = append(args, "-threads", threads, "-movflags", "+faststart", "-f", "mp4", p.Clip.Path)
@@ -120,6 +137,8 @@ func (a *Tools) inputs(p *Plan, picture bool) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		// looped and started at SoundStart
 		if p.Options.SoundLoop {
 			args = append(args, "-stream_loop", "-1")
 		}
@@ -145,6 +164,7 @@ func (a *Tools) inputs(p *Plan, picture bool) ([]string, error) {
 // scene-cut keyframes, so every segment of every rendition starts with a
 // keyframe at the same time. A tone mapped source is tagged bt709.
 func (a *Tools) videoArgs(p *Plan, profile job.Profile, keyint int) []string {
+	// the codec and its preset
 	args := []string{"-c:v", a.encoder(profile.VideoCodec)}
 	if profile.Preset != "" {
 		args = append(args, "-preset", profile.Preset)
@@ -180,6 +200,7 @@ func (a *Tools) videoArgs(p *Plan, profile job.Profile, keyint int) []string {
 		}
 	}
 
+	// a tone mapped source is tagged bt709
 	if p.Tonemap {
 		args = append(args, "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709")
 	}
@@ -195,6 +216,7 @@ func (a *Tools) soundArgs(profile job.Profile) []string {
 // playlist, init.mp4 (fMP4) and segment_NNNNN.m4s or .ts; the playlist
 // names them relative to itself.
 func (a *Tools) hlsArgs(h *job.HLS, r Rendition) []string {
+	// a VOD playlist of independent segments
 	args := []string{
 		"-f", "hls",
 		"-hls_time", strconv.FormatFloat(h.SegmentDuration, 'f', -1, 64),
@@ -202,6 +224,8 @@ func (a *Tools) hlsArgs(h *job.HLS, r Rendition) []string {
 		"-hls_list_size", "0",
 		"-hls_flags", "independent_segments",
 	}
+
+	// the segments: fMP4 with an init, or MPEG-TS
 	switch h.Format {
 	case job.HLSFMP4:
 		args = append(args, "-hls_segment_type", "fmp4", "-hls_fmp4_init_filename", "init.mp4",
@@ -210,6 +234,8 @@ func (a *Tools) hlsArgs(h *job.HLS, r Rendition) []string {
 		args = append(args, "-hls_segment_type", "mpegts",
 			"-hls_segment_filename", filepath.Join(r.Dir, "segment_%05d.ts"))
 	}
+
+	// the media playlist
 	return append(args, r.File)
 }
 
@@ -220,5 +246,6 @@ func (a *Plan) keyint(profile job.Profile) int {
 	if a.HLS == nil {
 		return 0
 	}
+
 	return int(math.Round(float64(profile.FPS) * a.HLS.Keyframe))
 }

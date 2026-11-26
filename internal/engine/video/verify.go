@@ -54,6 +54,7 @@ func (a *Tools) Verify(ctx context.Context, p *Plan, dir string) (*Report, *code
 		if e != nil {
 			return nil, e
 		}
+
 		e = a.check(out, r.Profile.Width, r.Profile.Height, p.Duration, p.HasSound, r.File)
 		if e != nil {
 			return nil, e
@@ -75,6 +76,8 @@ func (a *Tools) Verify(ctx context.Context, p *Plan, dir string) (*Report, *code
 		if e != nil {
 			return nil, e
 		}
+
+		// sound only when the plan has it and the preview asks for it
 		sound := p.HasSound && p.Clip.Preview.Sound
 		e = a.check(out, p.Clip.Geometry.Width, p.Clip.Geometry.Height, p.Clip.Duration, sound, p.Clip.Path)
 		if e != nil {
@@ -89,7 +92,10 @@ func (a *Tools) Verify(ctx context.Context, p *Plan, dir string) (*Report, *code
 		if err != nil {
 			return nil, a.fail(ctx, s.Path+" is not readable", err)
 		}
-		if m.Width != s.Size.Width || m.Height != s.Size.Height {
+
+		// the planned size
+		size := Size{Width: m.Width, Height: m.Height}
+		if size != s.Size {
 			return nil, code.New(code.VerifyFailed, fmt.Sprintf("%s is %dx%d, planned %dx%d", s.Path, m.Width, m.Height, s.Size.Width, s.Size.Height), nil)
 		}
 		report.Stills = append(report.Stills, Image{Width: m.Width, Height: m.Height, Size: m.Size})
@@ -125,19 +131,25 @@ func (a *Tools) output(ctx context.Context, dir, name string, hls bool) (Output,
 		return Output{}, a.fail(ctx, name, err)
 	}
 	out.Size = info.Size()
+
+	// an MP4 is done
 	if !hls {
 		return out, nil
 	}
 
+	// the playlist
 	text, err := os.ReadFile(file)
 	if err != nil {
 		return Output{}, a.fail(ctx, name, err)
 	}
+
 	pl := &Playlist{}
 	err = pl.Parse(string(text))
 	if err != nil {
 		return Output{}, code.New(code.VerifyFailed, name+": "+err.Error(), nil)
 	}
+
+	// a finished VOD playlist with segments
 	switch {
 	case !pl.VOD:
 		return Output{}, code.New(code.VerifyFailed, name+" is not a VOD playlist", nil)
@@ -155,10 +167,13 @@ func (a *Tools) output(ctx context.Context, dir, name string, hls bool) (Output,
 	for _, s := range pl.Segments {
 		names = append(names, s.Name)
 	}
+
+	// each present and not empty
 	for _, n := range names {
 		if n != filepath.Base(n) {
 			return Output{}, code.New(code.VerifyFailed, name+": "+n+" is not a plain file name", nil)
 		}
+
 		info, err := os.Stat(filepath.Join(filepath.Dir(file), n))
 		switch {
 		case err != nil:
@@ -168,6 +183,7 @@ func (a *Tools) output(ctx context.Context, dir, name string, hls bool) (Output,
 		}
 		out.Size += info.Size()
 	}
+
 	out.Playlist = pl
 	return out, nil
 }
@@ -176,15 +192,20 @@ func (a *Tools) output(ctx context.Context, dir, name string, hls bool) (Output,
 // tenth of a second and a frame) and audio exactly when planned.
 func (a *Tools) check(out Output, width, height int, duration float64, sound bool, name string) *code.Error {
 	m := out.Media
+
+	// a tenth of a second and a frame
 	tolerance := 0.1
 	if m.FPS > 0 {
 		tolerance += 1 / m.FPS
 	}
 
+	// the frame, the duration, the audio
 	switch {
 	case !m.HasVideo:
 		return code.New(code.VerifyFailed, name+" has no video", nil)
-	case m.Width != width || m.Height != height:
+	case m.Width != width:
+		return code.New(code.VerifyFailed, fmt.Sprintf("%s is %dx%d, planned %dx%d", name, m.Width, m.Height, width, height), nil)
+	case m.Height != height:
 		return code.New(code.VerifyFailed, fmt.Sprintf("%s is %dx%d, planned %dx%d", name, m.Width, m.Height, width, height), nil)
 	case math.Abs(m.Duration-duration) > tolerance:
 		return code.New(code.VerifyFailed, fmt.Sprintf("%s lasts %.3fs, planned %.3fs", name, m.Duration, duration), nil)
@@ -198,15 +219,20 @@ func (a *Tools) check(out Output, width, height int, duration float64, sound boo
 // as the first one, each as long within a millisecond (the playlists
 // print EXTINF to the microsecond); the CODECS of each is known.
 func (a *Tools) aligned(p *Plan, outs []Output) *code.Error {
+	// the first rendition is the reference
 	first := outs[0].Playlist
 	for i, out := range outs {
 		name := p.Renditions[i].Profile.Name
-		if out.Media.Codecs == "" {
+
+		// known codecs and as many segments as the first
+		switch {
+		case out.Media.Codecs == "":
 			return code.New(code.VerifyFailed, name+": the codecs of the rendition are unknown", nil)
-		}
-		if len(out.Playlist.Segments) != len(first.Segments) {
+		case len(out.Playlist.Segments) != len(first.Segments):
 			return code.New(code.VerifyFailed, fmt.Sprintf("%s has %d segments, %s has %d", name, len(out.Playlist.Segments), p.Renditions[0].Profile.Name, len(first.Segments)), nil)
 		}
+
+		// each segment as long as the first one's
 		for j, s := range out.Playlist.Segments {
 			if math.Abs(s.Duration-first.Segments[j].Duration) > 0.001 {
 				return code.New(code.VerifyFailed, fmt.Sprintf("%s segment %d lasts %.6fs, %s %.6fs", name, j, s.Duration, p.Renditions[0].Profile.Name, first.Segments[j].Duration), nil)
@@ -237,12 +263,15 @@ func (a *Tools) bytes(ctx context.Context, file string) (video, audio int64, err
 		if len(fields) < 2 {
 			continue
 		}
+
+		// the kind and the size of the packet
 		kind := fields[0]
 		size, err := strconv.ParseInt(strings.TrimSpace(fields[1]), 10, 64)
 		if err != nil {
 			return 0, 0, fmt.Errorf("video: packet size %q", fields[1])
 		}
 
+		// added to its stream
 		switch kind {
 		case "video":
 			video += size
@@ -259,5 +288,6 @@ func (a *Tools) fail(ctx context.Context, message string, err error) *code.Error
 	if ctx.Err() != nil {
 		return code.As(ctx.Err())
 	}
+
 	return code.New(code.VerifyFailed, message, err)
 }

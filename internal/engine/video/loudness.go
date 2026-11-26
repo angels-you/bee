@@ -29,19 +29,27 @@ type Loudness struct {
 // applies it as one volume filter before the fades. No compression, no
 // limiter: the dynamics stay. Without Normalize or sound nothing runs.
 func (a *Tools) Normalize(ctx context.Context, p *Plan) error {
-	if !p.Options.Normalize || !p.HasSound {
+	// nothing to normalize
+	switch {
+	case !p.Options.Normalize:
+		return nil
+	case !p.HasSound:
 		return nil
 	}
 
+	// the inputs of the encode, without the watermark picture
 	inputs, err := a.inputs(p, false)
 	if err != nil {
 		return err
 	}
+
+	// the loudness of the mix
 	l, err := a.measure(ctx, inputs, p.mixChains(), "[mix]")
 	if err != nil {
 		return err
 	}
 
+	// the gain the encode applies
 	p.Loudness = &l
 	p.Gain = l.gain(p.LUFS, p.TruePeak)
 	return nil
@@ -51,8 +59,10 @@ func (a *Tools) Normalize(ctx context.Context, p *Plan) error {
 // runs the chains, the label through ebur128 into the null muxer, and the
 // summary it logs is read.
 func (a *Tools) measure(ctx context.Context, inputs, chains []string, label string) (Loudness, error) {
+	// the chains, the label through ebur128
 	graph := strings.Join(append(chains, label+"ebur128=peak=true:framelog=quiet[measured]"), ";")
 
+	// the run into the null muxer; ebur128 logs at info
 	args := []string{"-nostdin", "-hide_banner", "-nostats", "-loglevel", "info", "-y"}
 	args = append(args, inputs...)
 	args = append(args, "-filter_complex", graph, "-map", "[measured]", "-f", "null", "-")
@@ -61,6 +71,7 @@ func (a *Tools) measure(ctx context.Context, inputs, chains []string, label stri
 		return Loudness{}, err
 	}
 
+	// the summary it logged
 	l := Loudness{}
 	err = l.parse(stderr)
 	return l, err
@@ -69,8 +80,11 @@ func (a *Tools) measure(ctx context.Context, inputs, chains []string, label stri
 // parse — the "Summary:" block ebur128 logs: I under "Integrated
 // loudness", LRA under "Loudness range", Peak under "True peak".
 func (a *Loudness) parse(log []byte) error {
+	// the section of the summary the line is in, and the summary seen
 	section := ""
 	found := false
+
+	// line by line
 	sc := bufio.NewScanner(bytes.NewReader(log))
 	for sc.Scan() {
 		line := sc.Text()
@@ -82,6 +96,7 @@ func (a *Loudness) parse(log []byte) error {
 		}
 		line = strings.TrimSpace(line)
 
+		// the values of the summary
 		switch {
 		case line == "Summary:":
 			found = true
@@ -98,6 +113,7 @@ func (a *Loudness) parse(log []byte) error {
 		}
 	}
 
+	// no summary: the filter did not run to the end
 	if !found {
 		return errors.New("video: ebur128 logged no summary")
 	}
@@ -107,10 +123,13 @@ func (a *Loudness) parse(log []byte) error {
 // value — the number of a summary line ("I:   -23.0 LUFS" → -23.0); floor
 // for -inf, nan or no number.
 func (a *Loudness) value(line string, floor float64) float64 {
+	// the label, then the number
 	fields := strings.Fields(line)
 	if len(fields) < 2 {
 		return floor
 	}
+
+	// a finite number, or the floor
 	x, err := strconv.ParseFloat(fields[1], 64)
 	switch {
 	case err != nil, math.IsInf(x, 0), math.IsNaN(x):
@@ -125,12 +144,16 @@ func (a *Loudness) value(line string, floor float64) float64 {
 // audio.ComputeGain), rounded to 0.01 dB. A mix with nothing measurable
 // (the integrated loudness at its floor: silence) gets 0.
 func (a Loudness) gain(target, ceiling float64) float64 {
+	// silence: nothing to bring up
 	if a.Integrated <= -70 {
 		return 0
 	}
+
+	// to the target, but the true peak stays under the ceiling
 	g := target - a.Integrated
 	if a.TruePeak+g > ceiling {
 		g = ceiling - a.TruePeak
 	}
+
 	return math.Round(g*100) / 100
 }

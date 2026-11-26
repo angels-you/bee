@@ -37,6 +37,7 @@ func (a *Plan) graph() string {
 	if a.Clip != nil {
 		outputs++
 	}
+
 	split := last + "setpts=(PTS-STARTPTS)/" + a.num(a.Speed) + ",split=" + strconv.Itoa(outputs)
 	for i := 0; i < outputs; i++ {
 		split += fmt.Sprintf("[c%d]", i)
@@ -47,10 +48,14 @@ func (a *Plan) graph() string {
 	branch := 0
 	for i, r := range a.Renditions {
 		var f []string
+
+		// the frame rate of the profile
 		rate := a.rate(r.Profile.FPS)
 		if rate != "" {
 			f = append(f, "fps="+rate)
 		}
+
+		// the frame of the profile
 		f = append(f, fmt.Sprintf("scale=%d:%d", r.Profile.Width, r.Profile.Height), "setsar=1", "format="+r.Profile.PixelFormat)
 		chains = append(chains, fmt.Sprintf("[c%d]%s[v%d]", branch, strings.Join(f, ","), i))
 		branch++
@@ -59,10 +64,14 @@ func (a *Plan) graph() string {
 	// the preview: its part of the timeline, fitted into its profile
 	if a.Clip != nil {
 		f := []string{"trim=start=" + a.num(a.Clip.Start) + ":duration=" + a.num(a.Clip.Duration), "setpts=PTS-STARTPTS"}
+
+		// the frame rate of the preview profile
 		rate := a.rate(a.Clip.Preview.Profile.FPS)
 		if rate != "" {
 			f = append(f, "fps="+rate)
 		}
+
+		// the frame of the preview
 		f = append(f, a.geometry(a.Clip.Geometry), "format="+a.Clip.Preview.Profile.PixelFormat)
 		chains = append(chains, fmt.Sprintf("[c%d]%s[pv]", branch, strings.Join(f, ",")))
 		branch++
@@ -109,7 +118,7 @@ func (a *Plan) videoChain() []string {
 		f = append(f, fmt.Sprintf("scale=%d:%d", src.DisplayWidth, src.DisplayHeight), "setsar=1")
 	}
 
-	// the extra clockwise rotation, then the mirror
+	// the extra clockwise rotation
 	switch o.Rotation {
 	case 90:
 		f = append(f, "transpose=clock")
@@ -118,6 +127,8 @@ func (a *Plan) videoChain() []string {
 	case 270:
 		f = append(f, "transpose=cclock")
 	}
+
+	// the mirror
 	if o.Mirror {
 		f = append(f, "hflip")
 	}
@@ -139,14 +150,18 @@ func (a *Plan) videoChain() []string {
 	if len(eq) > 0 {
 		f = append(f, "eq="+strings.Join(eq, ":"))
 	}
+
+	// black and white
 	if o.BW {
 		f = append(f, "hue=s=0")
 	}
 
-	// detail: a 5×5 luma unsharp mask, a gaussian blur
+	// detail: a 5×5 luma unsharp mask
 	if o.Sharpness != nil && *o.Sharpness > 0 {
 		f = append(f, "unsharp=luma_msize_x=5:luma_msize_y=5:luma_amount="+a.num(*o.Sharpness))
 	}
+
+	// a gaussian blur
 	if o.Blur > 0 {
 		f = append(f, "gblur=sigma="+a.num(o.Blur))
 	}
@@ -156,10 +171,14 @@ func (a *Plan) videoChain() []string {
 // markChain — the watermark picture scaled to its place and made
 // translucent by Opacity, as [mark].
 func (a *Plan) markChain() string {
+	// the size of the watermark, with alpha
 	f := []string{fmt.Sprintf("scale=%d:%d", a.Mark.Width, a.Mark.Height), "format=rgba"}
+
+	// the opacity
 	if a.Mark.Opacity < 1 {
 		f = append(f, "colorchannelmixer=aa="+a.num(a.Mark.Opacity))
 	}
+
 	return fmt.Sprintf("[%d:v:0]%s[mark]", a.markInput(), strings.Join(f, ","))
 }
 
@@ -167,13 +186,21 @@ func (a *Plan) markChain() string {
 // pixels.
 func (a *Plan) geometry(g Geometry) string {
 	var f []string
+
+	// cover: the crop first
 	if g.CropWidth > 0 {
 		f = append(f, fmt.Sprintf("crop=%d:%d:%d:%d", g.CropWidth, g.CropHeight, g.CropX, g.CropY))
 	}
+
+	// the picture
 	f = append(f, fmt.Sprintf("scale=%d:%d", g.ImageWidth, g.ImageHeight))
+
+	// contain: the background around it
 	if g.Pad {
 		f = append(f, fmt.Sprintf("pad=%d:%d:%d:%d:color=0x%s", g.Width, g.Height, g.PadX, g.PadY, strings.TrimPrefix(a.Options.Background, "#")))
 	}
+
+	// square pixels
 	f = append(f, "setsar=1")
 	return strings.Join(f, ",")
 }
@@ -231,12 +258,15 @@ func (a *Plan) mixChains() []string {
 func (a *Plan) audioChains() []string {
 	chains := a.mixChains()
 	o := a.Options
+	preview := a.Clip != nil && a.Clip.Preview.Sound
 
-	// one linear gain, then the fades of the final mix
+	// one linear gain
 	var f []string
 	if o.Normalize {
 		f = append(f, "volume="+a.num(a.Gain)+"dB")
 	}
+
+	// then the fades of the final mix
 	if o.FadeIn > 0 {
 		f = append(f, "afade=t=in:st=0:d="+a.num(min(o.FadeIn, a.Duration)))
 	}
@@ -247,9 +277,10 @@ func (a *Plan) audioChains() []string {
 
 	// one copy per output with sound
 	outputs := len(a.Renditions)
-	if a.Clip != nil && a.Clip.Preview.Sound {
+	if preview {
 		outputs++
 	}
+
 	split := "asplit=" + strconv.Itoa(outputs)
 	for i := 0; i < outputs; i++ {
 		split += fmt.Sprintf("[b%d]", i)
@@ -261,7 +292,9 @@ func (a *Plan) audioChains() []string {
 	for i, r := range a.Renditions {
 		chains = append(chains, fmt.Sprintf("[b%d]%s[a%d]", i, a.audioFormat(r.Profile), i))
 	}
-	if a.Clip != nil && a.Clip.Preview.Sound {
+
+	// the preview: its part of the timeline
+	if preview {
 		trim := "atrim=start=" + a.num(a.Clip.Start) + ":duration=" + a.num(a.Clip.Duration)
 		chains = append(chains, fmt.Sprintf("[b%d]%s,asetpts=PTS-STARTPTS,%s[pa]", len(a.Renditions), trim, a.audioFormat(a.Clip.Preview.Profile)))
 	}
@@ -273,14 +306,20 @@ func (a *Plan) audioChains() []string {
 func (a *Plan) tempo() []string {
 	var f []string
 	speed := a.Speed
+
+	// a fast speed: halves of it
 	for speed > 2 {
 		f = append(f, "atempo=2")
 		speed /= 2
 	}
+
+	// a slow speed: doubles of it
 	for speed < 0.5 {
 		f = append(f, "atempo=0.5")
 		speed /= 0.5
 	}
+
+	// the rest
 	if speed != 1 {
 		f = append(f, "atempo="+a.num(speed))
 	}
@@ -307,6 +346,7 @@ func (a *Plan) audioFormat(p job.Profile) string {
 	if p.Channels == 1 {
 		layout = "mono"
 	}
+
 	return "aformat=sample_rates=" + strconv.Itoa(p.SampleRate) + ":channel_layouts=" + layout
 }
 

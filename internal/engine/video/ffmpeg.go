@@ -78,10 +78,12 @@ func (a *Tools) Check(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
 	a.filters, err = a.list(ctx, "-filters")
 	if err != nil {
 		return err
 	}
+
 	a.muxers, err = a.list(ctx, "-muxers")
 	if err != nil {
 		return err
@@ -96,6 +98,7 @@ func (a *Tools) Check(ctx context.Context) error {
 	}
 	muxers := []string{"mp4", "hls", "mpegts", "image2"}
 
+	// every missing part, all at once
 	var errs []error
 	for _, name := range encoders {
 		if !a.encoders[name] {
@@ -121,18 +124,24 @@ func (a *Tools) Check(ctx context.Context) error {
 // never built; a dev machine may lack them.
 func (a *Tools) CheckProduction() error {
 	var errs []error
+
+	// the video encoders
 	if !a.CanEncode(job.VideoHEVC) {
 		errs = append(errs, errors.New("video: ffmpeg has no libx265 encoder (hevc)"))
 	}
 	if !a.CanEncode(job.VideoAV1) {
 		errs = append(errs, errors.New("video: ffmpeg has no libsvtav1 encoder (av1)"))
 	}
+
+	// the thumbnail formats
 	if !a.CanWrite(job.ImageWebP) {
 		errs = append(errs, errors.New("video: ffmpeg has no libwebp encoder (webp thumbnails)"))
 	}
 	if !a.CanWrite(job.ImageAVIF) {
 		errs = append(errs, errors.New("video: ffmpeg has no libsvtav1 encoder or avif muxer (avif thumbnails)"))
 	}
+
+	// HDR to SDR
 	if !a.CanTonemap() {
 		errs = append(errs, errors.New("video: ffmpeg has no zscale or tonemap filter (HDR to SDR)"))
 	}
@@ -150,19 +159,28 @@ func (a *Tools) list(ctx context.Context, what string) (map[string]bool, error) 
 		return nil, err
 	}
 
+	// the second field of every entry line
 	names := map[string]bool{}
 	sc := bufio.NewScanner(bytes.NewReader(out))
 	for sc.Scan() {
 		fields := strings.Fields(sc.Text())
-		if len(fields) < 2 || fields[1] == "=" {
+
+		switch {
+		case len(fields) < 2:
+			// the title, the dashes, an empty line
+			continue
+		case fields[1] == "=":
+			// a legend line
 			continue
 		}
+
 		names[fields[1]] = true
 	}
 	if sc.Err() != nil {
 		return nil, sc.Err()
 	}
 
+	// a build always lists something
 	if len(names) == 0 {
 		return nil, fmt.Errorf("video: ffmpeg %s printed no names", what)
 	}
@@ -215,18 +233,23 @@ func (a *Tools) encoder(c job.VideoCodec) string {
 // failure carries the end of stderr (local paths only, the tools never
 // see a url). SVT_LOG=1 keeps the svt-av1 library to its errors.
 func (a *Tools) run(ctx context.Context, dir, bin string, args ...string) ([]byte, []byte, error) {
+	// the process, without a shell
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "SVT_LOG=1")
 
+	// its output
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
+	// the run
 	err := cmd.Run()
 	if err == nil {
 		return stdout.Bytes(), stderr.Bytes(), nil
 	}
+
+	// a finished context is its own error
 	if ctx.Err() != nil {
 		return nil, nil, ctx.Err()
 	}

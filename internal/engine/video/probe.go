@@ -142,6 +142,7 @@ func (a *Tools) probe(ctx context.Context, file, formats string) (Media, error) 
 		return Media{}, err
 	}
 
+	// the report
 	var p probeOutput
 	err = json.Unmarshal(out, &p)
 	if err != nil {
@@ -166,6 +167,7 @@ func (a *Tools) probe(ctx context.Context, file, formats string) (Media, error) 
 		}
 	}
 
+	// a stream and a real duration
 	switch {
 	case !m.HasVideo && !m.HasAudio:
 		return Media{}, errors.New("video: no video or audio stream")
@@ -194,9 +196,12 @@ func (a Media) AcceptedSource() bool {
 // AcceptedSound — the audio codec of an external sound is one bee
 // decodes: lossy music formats, lossless, pcm.
 func (a Media) AcceptedSound() bool {
+	// every pcm
 	if strings.HasPrefix(a.AudioCodec, "pcm_") {
 		return true
 	}
+
+	// the compressed ones
 	switch a.AudioCodec {
 	case "aac", "mp3", "opus", "vorbis", "flac", "alac", "ac3", "eac3":
 		return true
@@ -216,17 +221,25 @@ func (a Media) AcceptedPicture() bool {
 
 // video — the fields of the video stream s.
 func (a *Media) video(s probeStream) {
+	// the codec and the coded frame
 	a.HasVideo = true
 	a.VideoCodec = s.CodecName
 	a.Width = s.Width
 	a.Height = s.Height
 	a.PixelFormat = s.PixFmt
+	a.VideoBitrate = s.kbps()
+	a.DAR = s.DAR
+
+	// colour
 	a.ColorSpace = s.ColorSpace
 	a.ColorTransfer = s.ColorTransfer
 	a.ColorPrimaries = s.ColorPrimaries
-	a.HDR = s.ColorTransfer == "smpte2084" || s.ColorTransfer == "arib-std-b67"
-	a.VideoBitrate = s.kbps()
-	a.DAR = s.DAR
+
+	// HDR: a PQ or HLG transfer
+	switch s.ColorTransfer {
+	case "smpte2084", "arib-std-b67":
+		a.HDR = true
+	}
 
 	// frame rate: the average one; the base one differs for variable
 	// frame rate (phones)
@@ -235,6 +248,8 @@ func (a *Media) video(s probeStream) {
 	if a.FPS <= 0 {
 		a.FPS = base
 	}
+
+	// a base rate apart from the average one: variable frame rate
 	a.VFR = base > 0 && math.Abs(base-a.FPS) > 0.01
 
 	// square pixels: the shown width is the coded one times the SAR
@@ -244,21 +259,27 @@ func (a *Media) video(s probeStream) {
 		a.SAR = "1:1"
 		sar = 1
 	}
+
+	// the shown frame
 	a.DisplayWidth = int(math.Round(float64(s.Width) * sar))
 	a.DisplayHeight = s.Height
 
-	// the display matrix turns the frame counter-clockwise; a quarter turn
-	// swaps the shown sides
+	// the display matrix turns the frame counter-clockwise
 	for _, d := range s.SideData {
 		if d.Type != "Display Matrix" {
 			continue
 		}
+
+		// clockwise, in quarter turns only
 		cw := (360 - int(math.Round(d.Rotation))%360) % 360
 		if cw%90 == 0 {
 			a.Rotation = cw
 		}
 	}
-	if a.Rotation == 90 || a.Rotation == 270 {
+
+	// a quarter turn swaps the shown sides
+	switch a.Rotation {
+	case 90, 270:
 		a.DisplayWidth, a.DisplayHeight = a.DisplayHeight, a.DisplayWidth
 	}
 }
@@ -285,14 +306,21 @@ func (a probeStream) ratio(value, sep string) float64 {
 		return 0
 	}
 
+	// the numerator
 	n, err := strconv.ParseFloat(num, 64)
 	if err != nil {
 		return 0
 	}
+
+	// the denominator, never 0
 	d, err := strconv.ParseFloat(den, 64)
-	if err != nil || d == 0 {
+	switch {
+	case err != nil:
+		return 0
+	case d == 0:
 		return 0
 	}
+
 	return n / d
 }
 
@@ -302,14 +330,18 @@ func (a probeStream) ratio(value, sep string) float64 {
 func (a probeStream) extradata() []byte {
 	var data []byte
 	for _, line := range strings.Split(a.Extradata, "\n") {
+		// the part after the offset
 		_, dump, ok := strings.Cut(line, ": ")
 		if !ok {
 			continue
 		}
+
+		// the hex part only, without the text one
 		if len(dump) > 39 {
 			dump = dump[:39]
 		}
 
+		// the bytes of the line
 		b, err := hex.DecodeString(strings.ReplaceAll(strings.TrimSpace(dump), " ", ""))
 		if err != nil {
 			return nil
@@ -342,15 +374,24 @@ func (a probeStream) avc() string {
 	data := a.extradata()
 
 	// avcC: 1, profile, constraints, level
-	if len(data) >= 4 && data[0] == 1 {
+	avcC := len(data) >= 4 && data[0] == 1
+	if avcC {
 		return fmt.Sprintf("avc1.%02x%02x%02x", data[1], data[2], data[3])
 	}
 
 	// Annex B: the bytes after the SPS header (start code 00 00 01, NAL type 7)
 	for i := 0; i+6 < len(data); i++ {
-		if data[i] != 0 || data[i+1] != 0 || data[i+2] != 1 {
+		// a start code
+		switch {
+		case data[i] != 0:
+			continue
+		case data[i+1] != 0:
+			continue
+		case data[i+2] != 1:
 			continue
 		}
+
+		// of an SPS
 		if data[i+3]&0x1f == 7 {
 			return fmt.Sprintf("avc1.%02x%02x%02x", data[i+4], data[i+5], data[i+6])
 		}
@@ -363,8 +404,12 @@ func (a probeStream) avc() string {
 // reversed bit order as hex, the constraint bytes without the trailing
 // zero ones. The sample entry is hvc1 (bee writes -tag:v hvc1).
 func (a probeStream) hvc() string {
+	// an hvcC box, version 1
 	data := a.extradata()
-	if len(data) < 13 || data[0] != 1 {
+	switch {
+	case len(data) < 13:
+		return ""
+	case data[0] != 1:
 		return ""
 	}
 
@@ -378,16 +423,19 @@ func (a probeStream) hvc() string {
 	case 3:
 		space = "C"
 	}
+
 	tier := "L"
 	if data[1]&0x20 != 0 {
 		tier = "H"
 	}
+
 	profile := data[1] & 0x1f
 
 	// compatibility flags, reversed
 	compat := uint32(data[2])<<24 | uint32(data[3])<<16 | uint32(data[4])<<8 | uint32(data[5])
 	compat = bits.Reverse32(compat)
 
+	// space, profile, compatibility, tier and level
 	s := fmt.Sprintf("hvc1.%s%d.%x.%s%d", space, profile, compat, tier, data[12])
 
 	// constraint bytes up to the last non-zero one
@@ -407,11 +455,16 @@ func (a probeStream) hvc() string {
 // av01 — av01.<profile>.<level><tier>.<bit depth> of the av1C box (AV1
 // codec ISOBMFF binding).
 func (a probeStream) av01() string {
+	// an av1C box: marker and version 1
 	data := a.extradata()
-	if len(data) < 4 || data[0] != 0x81 {
+	switch {
+	case len(data) < 4:
+		return ""
+	case data[0] != 0x81:
 		return ""
 	}
 
+	// profile, level and tier
 	profile := data[1] >> 5
 	level := data[1] & 0x1f
 	tier := "M"
@@ -419,12 +472,16 @@ func (a probeStream) av01() string {
 		tier = "H"
 	}
 
+	// the bit depth: high_bitdepth, then twelve_bit
+	high := data[2]&0x40 != 0
+	twelve := data[2]&0x20 != 0
 	depth := 8
-	if data[2]&0x40 != 0 {
+	switch {
+	case high && twelve:
+		depth = 12
+	case high:
 		depth = 10
 	}
-	if data[2]&0x40 != 0 && data[2]&0x20 != 0 {
-		depth = 12
-	}
+
 	return fmt.Sprintf("av01.%d.%02d%s.%02d", profile, level, tier, depth)
 }

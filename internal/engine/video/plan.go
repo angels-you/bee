@@ -163,7 +163,9 @@ func (a *Tools) Plan(in Input) (*Plan, *code.Error) {
 		return nil, code.New(code.InvalidJob, fmt.Sprintf("options.sound_start %.3fs is past the end of the sound (%.3fs)", in.Options.SoundStart, in.Sound.Media.Duration), nil)
 	case in.Watermark != nil && !in.Watermark.Media.HasVideo:
 		return nil, code.New(code.InvalidWatermark, "the watermark is not a picture", nil)
-	case in.Watermark != nil && (in.Watermark.Media.DisplayWidth <= 0 || in.Watermark.Media.DisplayHeight <= 0):
+	case in.Watermark != nil && in.Watermark.Media.DisplayWidth <= 0:
+		return nil, code.New(code.InvalidWatermark, "the watermark has no size", nil)
+	case in.Watermark != nil && in.Watermark.Media.DisplayHeight <= 0:
 		return nil, code.New(code.InvalidWatermark, "the watermark has no size", nil)
 	}
 
@@ -175,9 +177,10 @@ func (a *Tools) Plan(in Input) (*Plan, *code.Error) {
 	}
 	p.Duration = p.Length / p.Speed
 
-	// the frame: upright, then the extra rotation
+	// the frame: upright, then the extra rotation (a quarter turn swaps the sides)
 	p.Frame = Size{Width: src.DisplayWidth, Height: src.DisplayHeight}
-	if in.Options.Rotation == 90 || in.Options.Rotation == 270 {
+	switch in.Options.Rotation {
+	case 90, 270:
 		p.Frame = Size{Width: src.DisplayHeight, Height: src.DisplayWidth}
 	}
 
@@ -186,16 +189,22 @@ func (a *Tools) Plan(in Input) (*Plan, *code.Error) {
 	p.external = !in.Options.NoSound && in.Sound != nil && *in.Options.SoundVolume > 0
 	p.HasSound = p.original || p.external
 
-	// the outputs
+	// the renditions and the canvas
 	e := p.renditions()
 	if e != nil {
 		return nil, e
 	}
+
+	// the thumbnails
 	p.stills()
+
+	// the preview
 	e = p.clip()
 	if e != nil {
 		return nil, e
 	}
+
+	// the watermark
 	p.mark()
 	return p, nil
 }
@@ -230,10 +239,13 @@ func (a *Plan) renditions() *code.Error {
 			top = prof
 		}
 	}
+
+	// at least one profile fits
 	if len(a.Renditions) == 0 {
 		return code.New(code.NoRendition, fmt.Sprintf("every profile is larger than the source %dx%d and upscale is off", a.Frame.Width, a.Frame.Height), nil)
 	}
 
+	// the canvas: the frame fitted into the largest rendition
 	a.Canvas, _ = a.fit(a.Frame, top.Width, top.Height)
 	return nil
 }
@@ -257,10 +269,13 @@ func (a *Plan) stills() {
 		if math.IsInf(scale, 1) {
 			scale = 1
 		}
+
+		// never above the canvas without Upscale
 		if !a.Options.Upscale {
 			scale = min(scale, 1)
 		}
 
+		// the thumbnail
 		a.Stills = append(a.Stills, Still{
 			Thumbnail: t,
 			Position:  min(t.Position, a.Duration),
@@ -274,10 +289,11 @@ func (a *Plan) stills() {
 // duration; the canvas fitted into its profile, the profile shrunk to the
 // canvas without Upscale.
 func (a *Plan) clip() *code.Error {
-	if a.Preview == nil {
+	// no preview, or one past the end
+	switch {
+	case a.Preview == nil:
 		return nil
-	}
-	if a.Preview.Start >= a.Duration {
+	case a.Preview.Start >= a.Duration:
 		return code.New(code.InvalidJob, fmt.Sprintf("preview.start %.3fs is past the end of the timeline (%.3fs)", a.Preview.Start, a.Duration), nil)
 	}
 
@@ -286,10 +302,13 @@ func (a *Plan) clip() *code.Error {
 	width := a.Preview.Profile.Width
 	height := a.Preview.Profile.Height
 	g, scale := a.fit(canvas, width, height)
+
+	// without Upscale the profile shrinks to the canvas
 	if scale > 1.01 && !a.Options.Upscale {
 		g, _ = a.fit(canvas, max(2, a.even(float64(width)/scale)), max(2, a.even(float64(height)/scale)))
 	}
 
+	// the preview
 	a.Clip = &Clip{
 		Preview:  *a.Preview,
 		Start:    a.Preview.Start,
@@ -309,6 +328,7 @@ func (a *Plan) mark() {
 	w := a.Options.Watermark
 	img := a.Watermark.Media
 
+	// the size: never wider than the canvas, the aspect of the picture
 	width := min(w.Width, a.Canvas.Width)
 	height := max(1, int(math.Round(float64(width)*float64(img.DisplayHeight)/float64(img.DisplayWidth))))
 
@@ -317,6 +337,7 @@ func (a *Plan) mark() {
 	x := float64(w.Margin) + float64(a.Canvas.Width-width-2*w.Margin)*gx
 	y := float64(w.Margin) + float64(a.Canvas.Height-height-2*w.Margin)*gy
 
+	// the watermark, never outside the top left corner
 	a.Mark = &Mark{
 		Width:   width,
 		Height:  height,
@@ -334,13 +355,17 @@ func (a *Plan) mark() {
 //	contain  the picture fits inside the frame, the rest is padded
 //	stretch  the picture is the frame, the aspect is not kept
 func (a *Plan) fit(src Size, width, height int) (Geometry, float64) {
+	// the whole frame by default (stretch)
 	g := Geometry{Width: width, Height: height, ImageWidth: width, ImageHeight: height}
+
+	// the scale of each side and where the free space goes
 	sw := float64(src.Width)
 	sh := float64(src.Height)
 	sx := float64(width) / sw
 	sy := float64(height) / sh
 	gx, gy := a.gravity(a.Options.Gravity)
 
+	// the resize mode
 	switch a.Options.Resize {
 	case job.ResizeCover:
 		scale := max(sx, sy)

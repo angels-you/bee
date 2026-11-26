@@ -17,6 +17,7 @@ import (
 func (a *Tools) stillArgs(s Still) []string {
 	q := float64(s.Thumbnail.Quality)
 
+	// jpeg, png and webp: the image2 muxer, one file
 	switch s.Thumbnail.Format {
 	case job.ImageJPEG:
 		scale := 2 + int(math.Round((100-q)*29/99))
