@@ -4,11 +4,14 @@ package clients_test
 
 import (
 	"context"
-	"github.com/angels-you/bee/pkg/proto"
+	"encoding/json"
+	"github.com/angels-you/bee/internal/config"
+	"github.com/angels-you/bee/pkg/tools"
 	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -30,10 +33,10 @@ import (
 
 // client is what every client of bee offers.
 type client interface {
-	Audio(ctx context.Context, j audio.Job) (audio.Result, error)
-	Stream(ctx context.Context, j video.Stream) (video.Result, error)
-	Video(ctx context.Context, j video.Video) (video.Result, error)
-	Images(ctx context.Context, j images.Job) (images.Result, error)
+	GenerateAudio(ctx context.Context, j audio.Job) (audio.Result, error)
+	GenerateStream(ctx context.Context, j video.StreamJob) (video.Result, error)
+	GenerateVideo(ctx context.Context, j video.VideoJob) (video.Result, error)
+	GenerateImages(ctx context.Context, j images.Job) (images.Result, error)
 }
 
 // fixture is the bench, a local storage folder and a running server.
@@ -98,7 +101,7 @@ func (a *fixture) run(c client) {
 	defer cancel()
 
 	// audio
-	ar, err := c.Audio(ctx, a.bench.Audio("a1", "e2e/audio"))
+	ar, err := c.GenerateAudio(ctx, a.bench.Audio("a1", "e2e/audio"))
 	switch {
 	case err != nil:
 		t.Fatalf("audio: %v", err)
@@ -111,7 +114,7 @@ func (a *fixture) run(c client) {
 	a.stored("e2e/audio/wave.json")
 
 	// stream
-	sr, err := c.Stream(ctx, a.bench.Stream("s1", "e2e/stream"))
+	sr, err := c.GenerateStream(ctx, a.bench.Stream("s1", "e2e/stream"))
 	switch {
 	case err != nil:
 		t.Fatalf("stream: %v", err)
@@ -121,7 +124,7 @@ func (a *fixture) run(c client) {
 	a.stored("e2e/stream/index.m3u8")
 
 	// video
-	vr, err := c.Video(ctx, a.bench.Video("v1", "e2e/video"))
+	vr, err := c.GenerateVideo(ctx, a.bench.Video("v1", "e2e/video"))
 	switch {
 	case err != nil:
 		t.Fatalf("video: %v", err)
@@ -131,7 +134,7 @@ func (a *fixture) run(c client) {
 	a.stored("e2e/video/video.mp4")
 
 	// images
-	ir, err := c.Images(ctx, a.bench.Images("i1", "e2e/images"))
+	ir, err := c.GenerateImages(ctx, a.bench.Images("i1", "e2e/images"))
 	switch {
 	case err != nil:
 		t.Fatalf("images: %v", err)
@@ -143,7 +146,7 @@ func (a *fixture) run(c client) {
 	// a failed job: the result and the error carry the code
 	bad := a.bench.Images("i2", "e2e/bad")
 	bad.Input = a.bench.URL("missing.tif")
-	res, err := c.Images(ctx, bad)
+	res, err := c.GenerateImages(ctx, bad)
 	switch {
 	case code.As(err) == nil:
 		t.Fatal("missing source accepted")
@@ -156,9 +159,26 @@ func (a *fixture) run(c client) {
 	}
 
 	// a rerun of a done job: it runs again over the same keys
-	ar, err = c.Audio(ctx, a.bench.Audio("a1", "e2e/audio"))
+	ar, err = c.GenerateAudio(ctx, a.bench.Audio("a1", "e2e/audio"))
 	if err != nil || len(ar.Renditions) != 2 {
 		t.Errorf("rerun: %+v %v", ar, err)
+	}
+
+	// a big number id and meta come back exactly as sent
+	big := a.bench.Images("x", "e2e/big")
+	big.ID = int64(9007199254740993)
+	big.Meta = map[string]any{"user": 7}
+	br, err := c.GenerateImages(ctx, big)
+	if err != nil {
+		t.Fatalf("big id: %v", err)
+	}
+
+	data, _ := json.Marshal(br)
+	switch {
+	case !strings.Contains(string(data), `"id":9007199254740993`):
+		t.Errorf("big id changed: %s", data)
+	case !strings.Contains(string(data), `"meta":{"user":7}`):
+		t.Errorf("meta changed: %s", data)
 	}
 }
 
@@ -176,7 +196,7 @@ func TestHTTP(t *testing.T) {
 
 	// a wrong token
 	c.Token = "wrong"
-	_, err := c.Images(f.ctx, f.bench.Images("t1", "e2e/token"))
+	_, err := c.GenerateImages(f.ctx, f.bench.Images("t1", "e2e/token"))
 	if code.As(err) == nil || code.As(err).Code != code.InvalidJob {
 		t.Errorf("wrong token: %v", err)
 	}
@@ -205,7 +225,7 @@ func TestGRPC(t *testing.T) {
 	}
 	defer wrong.Close()
 
-	_, err = wrong.Images(f.ctx, f.bench.Images("t1", "e2e/token"))
+	_, err = wrong.GenerateImages(f.ctx, f.bench.Images("t1", "e2e/token"))
 	if code.As(err) == nil || code.As(err).Code != code.InvalidJob {
 		t.Errorf("wrong token: %v", err)
 	}
@@ -213,9 +233,9 @@ func TestGRPC(t *testing.T) {
 
 // TestNATS — the nats client against the nats consumer and a nats-server
 // of the test (skipped without nats-server): jobs are sent without
-// waiting, a worker on Done gets the results of every kind, success and
-// failure; two workers with one name share the results, another name gets
-// its own copy.
+// waiting, subscribers get the results of every kind, success and failure,
+// with the id and the meta as sent; two clients of one group share the
+// results, another group gets its own copy.
 func TestNATS(t *testing.T) {
 	f := fixture{}
 	f.init(t)
@@ -236,158 +256,203 @@ func TestNATS(t *testing.T) {
 	}
 	go cons.Run(f.ctx, f.engine(), 2, time.Second)
 
-	c, err := beenats.Dial(cfg.URL, cfg.Token, cfg.Names())
-	if err != nil {
-		t.Fatal(err)
-	}
+	// the worker: subscribers of every kind
+	w := &worker{t: t, got: map[string]any{}, done: make(chan struct{})}
+	w.want = 5
+	c := w.dial(cfg, "worker")
 	defer c.Close()
 
 	// send and forget
 	f.send(c)
 
-	// a worker: all five results
-	got := f.collect(c, "worker", 5)
-	f.check(got)
+	// all five results
+	w.wait()
+	f.check(w.got)
 
-	// two workers with one name share the results
-	shared := map[string]int{}
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	ctx, cancel := context.WithTimeout(f.ctx, time.Minute)
-	defer cancel()
+	// two clients of one group share the results, another group gets a copy
+	shared := &worker{t: t, got: map[string]any{}, done: make(chan struct{}), want: 5}
+	one := shared.dial(cfg, "shared")
+	defer one.Close()
+	two := shared.dial(cfg, "shared")
+	defer two.Close()
 
-	for range 2 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			c.Done(ctx, "shared", func(m proto.Envelope) error {
-				mu.Lock()
-				defer mu.Unlock()
+	other := &worker{t: t, got: map[string]any{}, done: make(chan struct{}), want: 5}
+	three := other.dial(cfg, "other")
+	defer three.Close()
 
-				shared[m.ID]++
-				if len(shared) == 5 {
-					cancel()
-				}
-				return nil
-			})
-		}()
-	}
-	wg.Wait()
+	shared.wait()
+	other.wait()
 
-	for id, n := range shared {
+	for id, n := range shared.count {
 		if n != 1 {
-			t.Errorf("shared workers got %s %d times", id, n)
+			t.Errorf("the shared group got %s %d times", id, n)
 		}
-	}
-	if len(shared) != 5 {
-		t.Errorf("shared workers got %d results", len(shared))
-	}
-
-	// another name: its own copy of every result
-	other := f.collect(c, "other", 5)
-	if len(other) != 5 {
-		t.Errorf("another name got %d results", len(other))
 	}
 }
 
-// send sends a job of every kind and one that fails; an invalid job is
-// refused before it is sent.
+// worker collects the results of every kind by id.
+type worker struct {
+	t     *testing.T
+	mu    sync.Mutex
+	got   map[string]any // the result by the id as text
+	count map[string]int // how many times each id came
+	want  int
+	done  chan struct{}
+}
+
+// dial is a client of group with a subscriber of every kind.
+func (a *worker) dial(cfg config.NATS, group string) *beenats.Client {
+	c, err := beenats.Dial(cfg.URL, cfg.Token, cfg.Names())
+	if err != nil {
+		a.t.Fatal(err)
+	}
+	c.Group = group
+
+	// one subscriber of every kind
+	errs := []error{
+		c.SubscribeAudio(func(res audio.Result) { a.add(res.ID, res) }),
+		c.SubscribeStream(func(res video.Result) { a.add(res.ID, res) }),
+		c.SubscribeVideo(func(res video.Result) { a.add(res.ID, res) }),
+		c.SubscribeImages(func(res images.Result) { a.add(res.ID, res) }),
+	}
+	for _, err := range errs {
+		if err != nil {
+			a.t.Fatal(err)
+		}
+	}
+
+	return c
+}
+
+// add records one result.
+func (a *worker) add(id any, res any) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.count == nil {
+		a.count = map[string]int{}
+	}
+
+	key := tools.IDString(id)
+	a.got[key] = res
+	a.count[key]++
+
+	if len(a.got) == a.want {
+		select {
+		case <-a.done:
+		default:
+			close(a.done)
+		}
+	}
+}
+
+// wait waits for want results.
+func (a *worker) wait() {
+	select {
+	case <-a.done:
+	case <-time.After(3 * time.Minute):
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		a.t.Fatalf("got %d results of %d: %v", len(a.got), a.want, a.got)
+	}
+}
+
+// send sends a job of every kind with numbers, strings and meta as ids,
+// and one that fails; an invalid job is refused before it is sent.
 func (a *fixture) send(c *beenats.Client) {
 	t := a.t
+	meta := map[string]any{"user": 7, "note": "from the test"}
 
-	err := c.Audio(a.ctx, a.bench.Audio("a1", "nats/audio"))
+	// audio with a big int id
+	audioJob := a.bench.Audio("x", "nats/audio")
+	audioJob.ID = int64(9007199254740993)
+	audioJob.Meta = meta
+	err := c.GenerateAudio(audioJob)
 	if err != nil {
 		t.Fatalf("audio: %v", err)
 	}
 
-	err = c.Stream(a.ctx, a.bench.Stream("s1", "nats/stream"))
+	// stream with a string id
+	stream := a.bench.Stream("abc", "nats/stream")
+	stream.Meta = meta
+	err = c.GenerateStream(stream)
 	if err != nil {
 		t.Fatalf("stream: %v", err)
 	}
 
-	err = c.Video(a.ctx, a.bench.Video("v1", "nats/video"))
+	// video with a small number id
+	videoJob := a.bench.Video("x", "nats/video")
+	videoJob.ID = 3
+	err = c.GenerateVideo(videoJob)
 	if err != nil {
 		t.Fatalf("video: %v", err)
 	}
 
-	err = c.Images(a.ctx, a.bench.Images("i1", "nats/images"))
+	// images with a text id with spaces
+	err = c.GenerateImages(a.bench.Images("фото 4", "nats/images"))
 	if err != nil {
 		t.Fatalf("images: %v", err)
 	}
 
 	// a job that fails in bee
-	bad := a.bench.Images("i2", "nats/bad")
+	bad := a.bench.Images("bad", "nats/bad")
 	bad.Input = a.bench.URL("missing.tif")
-	err = c.Images(a.ctx, bad)
+	bad.Meta = meta
+	err = c.GenerateImages(bad)
 	if err != nil {
 		t.Fatalf("bad images: %v", err)
 	}
 
-	// a job that is not valid is never sent
-	err = c.Audio(a.ctx, a.bench.Audio("", "nats/none"))
-	if code.As(err) == nil || code.As(err).Code != code.InvalidJob {
-		t.Errorf("invalid job: %v", err)
-	}
-}
-
-// collect reads n results with the consumer name.
-func (a *fixture) collect(c *beenats.Client, name string, n int) map[string]proto.Envelope {
-	got := map[string]proto.Envelope{}
-	ctx, cancel := context.WithTimeout(a.ctx, 3*time.Minute)
-	defer cancel()
-
-	err := c.Done(ctx, name, func(m proto.Envelope) error {
-		got[m.ID] = m
-		if len(got) == n {
-			cancel()
+	// jobs that are not valid are never sent
+	for _, id := range []any{nil, "", true, map[string]any{}, 1.5} {
+		j := a.bench.Audio("x", "nats/none")
+		j.ID = id
+		err = c.GenerateAudio(j)
+		if code.As(err) == nil || code.As(err).Code != code.InvalidJob {
+			t.Errorf("invalid id %v: %v", id, err)
 		}
-		return nil
-	})
-	if err != nil {
-		a.t.Fatalf("done %s: %v", name, err)
 	}
-
-	return got
 }
 
-// check checks the five results of send.
-func (a *fixture) check(got map[string]proto.Envelope) {
+// check checks the five results of send: ids and meta as sent.
+func (a *fixture) check(got map[string]any) {
 	t := a.t
 
-	// audio
-	ar, err := got["a1"].Audio()
-	if err != nil || ar.Error != nil || len(ar.Renditions) != 2 {
-		t.Errorf("audio: %+v %v", ar, err)
+	// audio: the big id as the same number, the meta back
+	ar, _ := got["9007199254740993"].(audio.Result)
+	data, _ := json.Marshal(ar)
+	switch {
+	case ar.Error != nil, len(ar.Renditions) != 2:
+		t.Errorf("audio: %+v", ar)
+	case !strings.Contains(string(data), `"id":9007199254740993`):
+		t.Errorf("audio id changed: %s", data)
+	case !strings.Contains(string(data), `"meta":{"note":"from the test","user":7}`):
+		t.Errorf("audio meta changed: %s", data)
 	}
 	a.stored("nats/audio/master.m3u8")
 
-	// stream and video
-	sr, err := got["s1"].Video()
-	if err != nil || sr.Error != nil || len(sr.Profiles) != 1 {
-		t.Errorf("stream: %+v %v", sr, err)
+	// stream with the string id
+	sr, _ := got["abc"].(video.Result)
+	if sr.Error != nil || len(sr.Profiles) != 1 || sr.ID != "abc" || sr.Meta["user"] == nil {
+		t.Errorf("stream: %+v", sr)
 	}
 
-	vr, err := got["v1"].Video()
-	if err != nil || vr.Error != nil || vr.Output != "nats/video/video.mp4" {
-		t.Errorf("video: %+v %v", vr, err)
+	// video
+	vr, _ := got["3"].(video.Result)
+	if vr.Error != nil || vr.Output != "nats/video/video.mp4" {
+		t.Errorf("video: %+v", vr)
 	}
 	a.stored("nats/video/video.mp4")
 
 	// images
-	ir, err := got["i1"].Images()
-	if err != nil || ir.Error != nil || len(ir.Tasks) != 2 {
-		t.Errorf("images: %+v %v", ir, err)
+	ir, _ := got["фото 4"].(images.Result)
+	if ir.Error != nil || len(ir.Tasks) != 2 {
+		t.Errorf("images: %+v", ir)
 	}
 
-	// the failure
-	e := got["i2"].Failure()
-	if e == nil || e.Code != code.SourceUnavailable {
-		t.Errorf("bad images: %v", e)
-	}
-
-	// a result of another kind is refused
-	_, err = got["a1"].Images()
-	if err == nil {
-		t.Error("audio read as images")
+	// the failure, with its meta
+	br, _ := got["bad"].(images.Result)
+	if br.Error == nil || br.Error.Code != code.SourceUnavailable || br.Meta["note"] != "from the test" {
+		t.Errorf("bad images: %+v", br)
 	}
 }

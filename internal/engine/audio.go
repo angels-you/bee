@@ -50,13 +50,20 @@ type audioRendition struct {
 // last → verify. A failed job returns a Result with Error and the same
 // *code.Error as the error
 func (a *Engine) Audio(ctx context.Context, j audio.Job) (audio.Result, error) {
-	r := &audioRun{work: a.newWork(proto.Audio, j.ID, j.Input), job: j}
+	r := &audioRun{work: a.newWork(proto.Audio, j.ID, j.Input, j.Meta), job: j}
 	r.res.ID = j.ID
+	r.res.Meta = j.Meta
 	r.res.Metrics = map[string]int64{}
+
+	// the meta of the caller
+	e := r.checkMeta()
+	if e != nil {
+		return r.fail(e)
+	}
 
 	// check a copy: the caller's job is not changed
 	r.job.Options.Renditions = slices.Clone(j.Options.Renditions)
-	e := a.checkAudio(&r.job)
+	e = a.checkAudio(&r.job)
 	if e != nil {
 		return r.fail(e)
 	}
@@ -133,7 +140,7 @@ func (a *Engine) checkAudio(j *audio.Job) *code.Error {
 	}
 
 	// each variant folder next to master belongs to HLS
-	others := map[string]string{"wave": j.Wave, "meta": j.Meta, "analysis": j.Analysis}
+	others := map[string]string{"wave": j.Wave, "metadata": j.Metadata, "analysis": j.Analysis}
 	for _, kbit := range o.Renditions {
 		folder := path.Join(path.Dir(j.Output), strconv.Itoa(kbit)) + "/"
 
@@ -268,7 +275,7 @@ func (a *audioRun) probe(ctx context.Context) *code.Error {
 	}
 
 	a.meta = m
-	a.res.Meta = &a.meta
+	a.res.Metadata = &a.meta
 
 	// quality notes about the source
 	lossy := false
@@ -642,7 +649,7 @@ func (a *audioRun) sideFiles() ([]upload, *code.Error) {
 	var side []upload
 
 	// metadata
-	if a.job.Meta != "" {
+	if a.job.Metadata != "" {
 		meta := struct {
 			SHA256     string            `json:"sha256"`
 			Renditions []audio.Rendition `json:"renditions"`
@@ -653,7 +660,7 @@ func (a *audioRun) sideFiles() ([]upload, *code.Error) {
 		if err != nil {
 			return nil, code.New(code.InternalTemporaryError, "metadata json", err)
 		}
-		side = append(side, upload{key: a.job.Meta, data: data})
+		side = append(side, upload{key: a.job.Metadata, data: data})
 	}
 
 	// analysis: only what is safe to publish
@@ -690,7 +697,7 @@ func (a *audioRun) verify(ctx context.Context) *code.Error {
 		)
 	}
 
-	for _, key := range []string{a.job.Wave, a.job.Meta, a.job.Analysis} {
+	for _, key := range []string{a.job.Wave, a.job.Metadata, a.job.Analysis} {
 		if key != "" {
 			required = append(required, key)
 		}

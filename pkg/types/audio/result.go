@@ -3,12 +3,13 @@ package audio
 import "github.com/angels-you/bee/pkg/types/code"
 
 // Result is the result of one track: what bee measured. Result keys are
-// the client's keys (Job.Output, Wave, Meta, Analysis) and are not repeated
+// the client's keys (Job.Output, Wave, Metadata, Analysis) and are not repeated
 // here. A failed job has Error: none of its results count, whatever is
 // already in storage
 type Result struct {
-	ID      string `json:"id"`
-	Elapsed int64  `json:"elapsed"` // milliseconds for the whole job
+	ID      any            `json:"id"`             // the job id as sent
+	Meta    map[string]any `json:"meta,omitempty"` // the job meta as sent
+	Elapsed int64          `json:"elapsed"`        // milliseconds for the whole job
 
 	SHA256     string `json:"sha256,omitempty"`      // of the original
 	SourceSize int64  `json:"source_size,omitempty"` // bytes of the original
@@ -28,7 +29,7 @@ type Result struct {
 
 	Metrics map[string]int64 `json:"metrics,omitempty"` // stage → milliseconds
 
-	Meta        *Metadata    `json:"meta,omitempty"`
+	Metadata    *Metadata    `json:"metadata,omitempty"`
 	Loudness    *Loudness    `json:"loudness,omitempty"`
 	Quality     *Quality     `json:"quality,omitempty"`
 	Fingerprint *Fingerprint `json:"fingerprint,omitempty"` // only in the response, never written to storage

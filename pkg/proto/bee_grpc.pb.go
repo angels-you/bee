@@ -33,8 +33,8 @@ const (
 // github.com/angels-you/bee/pkg/types (the same json as http and nats):
 //
 //	Audio   audio.Job    -> audio.Result
-//	Stream  video.Stream -> video.Result
-//	Video   video.Video  -> video.Result
+//	Stream  video.StreamJob -> video.Result
+//	Video   video.VideoJob  -> video.Result
 //	Images  images.Job   -> images.Result
 //
 // A failed job is a gRPC status: the bee code in the message
@@ -104,8 +104,8 @@ func (c *beeClient) Images(ctx context.Context, in *Job, opts ...grpc.CallOption
 // github.com/angels-you/bee/pkg/types (the same json as http and nats):
 //
 //	Audio   audio.Job    -> audio.Result
-//	Stream  video.Stream -> video.Result
-//	Video   video.Video  -> video.Result
+//	Stream  video.StreamJob -> video.Result
+//	Video   video.VideoJob  -> video.Result
 //	Images  images.Job   -> images.Result
 //
 // A failed job is a gRPC status: the bee code in the message

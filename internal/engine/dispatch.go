@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"github.com/angels-you/bee/pkg/tools"
 
 	"github.com/angels-you/bee/pkg/proto"
 	"github.com/angels-you/bee/pkg/types/audio"
@@ -33,7 +34,7 @@ func (a *Engine) Do(ctx context.Context, kind proto.Kind, data []byte) ([]byte, 
 // doAudio runs an audio job from json
 func (a *Engine) doAudio(ctx context.Context, data []byte) ([]byte, error) {
 	var j audio.Job
-	err := json.Unmarshal(data, &j)
+	err := tools.Decode(data, &j)
 	if err != nil {
 		return a.malformed(data, "job is not json: "+err.Error())
 	}
@@ -44,8 +45,8 @@ func (a *Engine) doAudio(ctx context.Context, data []byte) ([]byte, error) {
 
 // doStream runs an HLS job from json
 func (a *Engine) doStream(ctx context.Context, data []byte) ([]byte, error) {
-	var j video.Stream
-	err := json.Unmarshal(data, &j)
+	var j video.StreamJob
+	err := tools.Decode(data, &j)
 	if err != nil {
 		return a.malformed(data, "job is not json: "+err.Error())
 	}
@@ -56,8 +57,8 @@ func (a *Engine) doStream(ctx context.Context, data []byte) ([]byte, error) {
 
 // doVideo runs an MP4 job from json
 func (a *Engine) doVideo(ctx context.Context, data []byte) ([]byte, error) {
-	var j video.Video
-	err := json.Unmarshal(data, &j)
+	var j video.VideoJob
+	err := tools.Decode(data, &j)
 	if err != nil {
 		return a.malformed(data, "job is not json: "+err.Error())
 	}
@@ -69,7 +70,7 @@ func (a *Engine) doVideo(ctx context.Context, data []byte) ([]byte, error) {
 // doImages runs an image job from json
 func (a *Engine) doImages(ctx context.Context, data []byte) ([]byte, error) {
 	var j images.Job
-	err := json.Unmarshal(data, &j)
+	err := tools.Decode(data, &j)
 	if err != nil {
 		return a.malformed(data, "job is not json: "+err.Error())
 	}
@@ -92,13 +93,13 @@ func (a *Engine) reply(res any, err error) ([]byte, error) {
 // malformed handles a non-job: a result with the id (if readable) and INVALID_JOB
 func (a *Engine) malformed(data []byte, message string) ([]byte, error) {
 	var head struct {
-		ID string `json:"id"`
+		ID any `json:"id"`
 	}
-	json.Unmarshal(data, &head)
+	tools.Decode(data, &head)
 
 	e := code.New(code.InvalidJob, message, nil)
 	res := struct {
-		ID    string      `json:"id"`
+		ID    any         `json:"id"`
 		Error *code.Error `json:"error"`
 	}{head.ID, e}
 

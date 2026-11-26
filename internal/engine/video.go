@@ -53,12 +53,18 @@ type videoRendition struct {
 }
 
 // Stream runs one HLS job (see process)
-func (a *Engine) Stream(ctx context.Context, j video.Stream) (video.Result, error) {
-	r := &videoRun{work: a.newWork(proto.Stream, j.ID, j.Input)}
+func (a *Engine) Stream(ctx context.Context, j video.StreamJob) (video.Result, error) {
+	r := &videoRun{work: a.newWork(proto.Stream, j.ID, j.Input, j.Meta)}
+
+	// the meta of the caller
+	e := r.checkMeta()
+	if e != nil {
+		return r.fail(e)
+	}
 
 	// check a copy: the caller's job is not changed
 	check := videoCheck{cfg: a.cfg}
-	e := check.checkStream(&j)
+	e = check.checkStream(&j)
 	if e != nil {
 		return r.fail(e)
 	}
@@ -73,12 +79,18 @@ func (a *Engine) Stream(ctx context.Context, j video.Stream) (video.Result, erro
 }
 
 // Video runs one job with a single MP4 (see process)
-func (a *Engine) Video(ctx context.Context, j video.Video) (video.Result, error) {
-	r := &videoRun{work: a.newWork(proto.Video, j.ID, j.Input)}
+func (a *Engine) Video(ctx context.Context, j video.VideoJob) (video.Result, error) {
+	r := &videoRun{work: a.newWork(proto.Video, j.ID, j.Input, j.Meta)}
+
+	// the meta of the caller
+	e := r.checkMeta()
+	if e != nil {
+		return r.fail(e)
+	}
 
 	// check a copy: the caller's job is not changed
 	check := videoCheck{cfg: a.cfg}
-	e := check.checkVideo(&j)
+	e = check.checkVideo(&j)
 	if e != nil {
 		return r.fail(e)
 	}
@@ -551,6 +563,7 @@ func (a *videoRun) entryOf() {
 func (a *videoRun) result() {
 	res := video.Result{
 		ID:         a.id,
+		Meta:       a.meta,
 		Output:     a.output,
 		SHA256:     a.res.SHA256,
 		SourceSize: a.res.SourceSize,
@@ -666,7 +679,7 @@ func (a *videoRun) done() (video.Result, error) {
 
 // fail returns a failed result: id and error, nothing else is computed
 func (a *videoRun) fail(e *code.Error) (video.Result, error) {
-	a.res = video.Result{ID: a.id, Elapsed: a.elapsed(), Error: e}
+	a.res = video.Result{ID: a.id, Meta: a.meta, Elapsed: a.elapsed(), Error: e}
 	a.work.fail(e)
 
 	return a.res, e

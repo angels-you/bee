@@ -1,7 +1,9 @@
 // Package beenats is the Go client of bee over NATS JetStream: send and
-// forget. A call checks the job and publishes it on the jobs subject; it
-// returns once JetStream has accepted it. The result comes later on the
-// done subject, where a worker of yours reads it with Done.
+// forget. Audio, Stream, Video and Images check the job and publish it on
+// the jobs subject; they return once JetStream has accepted it. The
+// results come later on the done subject: SubscribeAudio, SubscribeStream,
+// SubscribeVideo and SubscribeImages turn the client into a worker of the
+// results.
 //
 //	c, err := beenats.Dial("nats://nats:4222", os.Getenv("NATS_TOKEN"), proto.Names{})
 //	if err != nil {
@@ -9,17 +11,17 @@
 //	}
 //	defer c.Close()
 //
-//	// send
-//	err = c.Images(ctx, images.Job{ID: "photo-1", Input: url, Tasks: tasks})
-//
-//	// a worker of yours: every result, until ctx ends
-//	err = c.Done(ctx, "my-service", func(m proto.Envelope) error {
-//		res, err := m.Images()
-//		if err != nil {
-//			return err
+//	// the worker: every images result, until Close
+//	err = c.SubscribeImages(func(res images.Result) {
+//		if res.Error != nil {
+//			log.Println(res.ID, res.Error.Code)
+//			return
 //		}
-//		return save(m.ID, res) // nil: ack; an error: the result comes again later
+//		save(res.ID, res.Meta, res.Tasks)
 //	})
+//
+//	// send
+//	err = c.GenerateImages(images.Job{ID: 42, Input: url, Tasks: tasks, Meta: map[string]any{"user": 7}})
 //
 // proto.Names holds the two subjects of the bees (BEE_NATS_JOBS and
 // BEE_NATS_DONE); the zero value is the defaults bee.jobs and bee.done.
@@ -31,12 +33,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"sync"
 	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/angels-you/bee/pkg/proto"
+	"github.com/angels-you/bee/pkg/tools"
 	"github.com/angels-you/bee/pkg/types/audio"
 	"github.com/angels-you/bee/pkg/types/images"
 	"github.com/angels-you/bee/pkg/types/video"
@@ -45,11 +50,21 @@ import (
 // Client sends jobs to the bees of one pair of subjects and reads their
 // results.
 type Client struct {
-	nc    *nats.Conn
-	js    jetstream.JetStream
-	names proto.Names
-	own   bool          // the connection is the client's: Close closes it
-	retry time.Duration // when a result whose handler failed comes again
+	// Group is the group of the subscribers, "default" by default: every
+	// instance of a service with the same group shares the results, a
+	// service with another group gets its own copy. Set it before the
+	// first Subscribe; A-Z, a-z, 0-9, _ and - only
+	Group string
+
+	nc      *nats.Conn
+	js      jetstream.JetStream
+	names   proto.Names
+	own     bool          // the connection is the client's: Close closes it
+	timeout time.Duration // the longest wait for JetStream to accept a job
+	retry   time.Duration // when a result whose handler panicked comes again
+
+	mu   sync.Mutex
+	subs []jetstream.ConsumeContext
 }
 
 // Dial connects to url with token (empty: none) for the bees of names.
@@ -93,61 +108,70 @@ func New(nc *nats.Conn, names proto.Names) (*Client, error) {
 	return a, nil
 }
 
-// init sets the constant values of the client.
+// init sets the defaults of the client.
 func (a *Client) init() {
+	a.Group = "default"
+	a.timeout = 10 * time.Second
 	a.retry = 5 * time.Second
 }
 
-// Close closes the connection made by Dial.
+// Close stops the subscribers and closes the connection made by Dial.
 func (a *Client) Close() {
+	a.mu.Lock()
+	for _, sub := range a.subs {
+		sub.Stop()
+	}
+	a.subs = nil
+	a.mu.Unlock()
+
 	if a.own {
 		a.nc.Close()
 	}
 }
 
-// Audio sends an audio job.
-func (a *Client) Audio(ctx context.Context, j audio.Job) error {
+// GenerateAudio sends an audio job.
+func (a *Client) GenerateAudio(j audio.Job) error {
 	e := j.Validate()
 	if e != nil {
 		return e
 	}
 
-	return a.send(ctx, proto.Audio, j)
+	return a.send(proto.Audio, j)
 }
 
-// Stream sends an HLS job.
-func (a *Client) Stream(ctx context.Context, j video.Stream) error {
+// GenerateStream sends an HLS job.
+func (a *Client) GenerateStream(j video.StreamJob) error {
 	e := j.Validate()
 	if e != nil {
 		return e
 	}
 
-	return a.send(ctx, proto.Stream, j)
+	return a.send(proto.Stream, j)
 }
 
-// Video sends an MP4 job.
-func (a *Client) Video(ctx context.Context, j video.Video) error {
+// GenerateVideo sends an MP4 job.
+func (a *Client) GenerateVideo(j video.VideoJob) error {
 	e := j.Validate()
 	if e != nil {
 		return e
 	}
 
-	return a.send(ctx, proto.Video, j)
+	return a.send(proto.Video, j)
 }
 
-// Images sends an images job.
-func (a *Client) Images(ctx context.Context, j images.Job) error {
+// GenerateImages sends an images job.
+func (a *Client) GenerateImages(j images.Job) error {
 	e := j.Validate()
 	if e != nil {
 		return e
 	}
 
-	return a.send(ctx, proto.Images, j)
+	return a.send(proto.Images, j)
 }
 
-// send publishes the envelope of job on the jobs subject and waits for
-// JetStream to accept it.
-func (a *Client) send(ctx context.Context, kind proto.Kind, job any) error {
+// send publishes the envelope of job on the jobs subject and waits up to
+// the timeout for JetStream to accept it.
+func (a *Client) send(kind proto.Kind, job any) error {
 	data, err := json.Marshal(job)
 	if err != nil {
 		return err
@@ -160,18 +184,77 @@ func (a *Client) send(ctx context.Context, kind proto.Kind, job any) error {
 	}
 
 	// the publish, confirmed by JetStream
+	ctx, cancel := context.WithTimeout(context.Background(), a.timeout)
+	defer cancel()
+
 	_, err = a.js.Publish(ctx, a.names.JobsSubject(), msg)
 	return err
 }
 
-// Done reads the results with the durable consumer name until ctx ends
-// (then it returns nil). Instances of a service with the same name share
-// the results, every name gets its own copy. handle returning nil acks the
-// result; an error makes it come again a few seconds later.
-func (a *Client) Done(ctx context.Context, name string, handle func(proto.Envelope) error) error {
-	if name == "" {
-		return errors.New("beenats: the consumer name is required")
+// SubscribeAudio calls v for every audio result, failed ones included
+// (res.Error), until Close. It returns at once.
+func (a *Client) SubscribeAudio(v func(res audio.Result)) error {
+	return a.subscribe(proto.Audio, func(m proto.Envelope) error {
+		res, err := m.Audio()
+		if err != nil {
+			return err
+		}
+
+		v(res)
+		return nil
+	})
+}
+
+// SubscribeStream calls v for every HLS result until Close.
+func (a *Client) SubscribeStream(v func(res video.Result)) error {
+	return a.subscribe(proto.Stream, func(m proto.Envelope) error {
+		res, err := m.Video()
+		if err != nil {
+			return err
+		}
+
+		v(res)
+		return nil
+	})
+}
+
+// SubscribeVideo calls v for every MP4 result until Close.
+func (a *Client) SubscribeVideo(v func(res video.Result)) error {
+	return a.subscribe(proto.Video, func(m proto.Envelope) error {
+		res, err := m.Video()
+		if err != nil {
+			return err
+		}
+
+		v(res)
+		return nil
+	})
+}
+
+// SubscribeImages calls v for every images result until Close.
+func (a *Client) SubscribeImages(v func(res images.Result)) error {
+	return a.subscribe(proto.Images, func(m proto.Envelope) error {
+		res, err := m.Images()
+		if err != nil {
+			return err
+		}
+
+		v(res)
+		return nil
+	})
+}
+
+// subscribe runs the durable consumer of the group for the results of
+// kind: results of other kinds are acked at once, the results of kind go
+// to handle.
+func (a *Client) subscribe(kind proto.Kind, handle func(proto.Envelope) error) error {
+	name, err := a.names.Subscriber(a.Group, kind)
+	if err != nil {
+		return err
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), a.timeout)
+	defer cancel()
 
 	// the durable consumer of the results
 	cons, err := a.js.CreateOrUpdateConsumer(ctx, a.names.DoneStream(), jetstream.ConsumerConfig{
@@ -180,44 +263,67 @@ func (a *Client) Done(ctx context.Context, name string, handle func(proto.Envelo
 		AckPolicy:     jetstream.AckExplicitPolicy,
 	})
 	if err != nil {
+		return fmt.Errorf("beenats: consumer %s: %w", name, err)
+	}
+
+	// the results, in the background until Close
+	sub, err := cons.Consume(func(msg jetstream.Msg) {
+		a.deliver(msg, kind, handle)
+	})
+	if err != nil {
 		return err
 	}
 
-	// one result at a time until ctx ends
-	for {
-		msg, err := cons.Next(jetstream.FetchContext(ctx))
-		switch {
-		case ctx.Err() != nil:
-			return nil
-		case errors.Is(err, nats.ErrTimeout):
-			continue
-		case errors.Is(err, jetstream.ErrNoMessages):
-			continue
-		case err != nil:
-			return err
-		}
+	a.mu.Lock()
+	a.subs = append(a.subs, sub)
+	a.mu.Unlock()
 
-		a.handle(msg, handle)
+	return nil
+}
+
+// deliver gives one result of kind to handle and acks it after; a result
+// of another kind is acked at once; a message that is not a result is
+// terminated; a panic of handle leaves the result for later.
+func (a *Client) deliver(msg jetstream.Msg, kind proto.Kind, handle func(proto.Envelope) error) {
+	var m proto.Envelope
+	err := tools.Decode(msg.Data(), &m)
+
+	switch {
+	case err != nil:
+		msg.Term()
+		return
+	case m.Kind != kind:
+		msg.Ack()
+		return
+	}
+
+	// the handler
+	err = a.call(handle, m)
+	switch {
+	case errors.Is(err, errPanic{}):
+		msg.NakWithDelay(a.retry)
+	case err != nil:
+		msg.Term()
+	default:
+		msg.Ack()
 	}
 }
 
-// handle gives one result to the handler: acked when it returns nil,
-// nak'ed with the retry delay when it fails or the envelope is not json.
-func (a *Client) handle(msg jetstream.Msg, handle func(proto.Envelope) error) {
-	var m proto.Envelope
-	err := json.Unmarshal(msg.Data(), &m)
+// call runs handle; a panic of handle comes back as errPanic.
+func (a *Client) call(handle func(proto.Envelope) error, m proto.Envelope) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = errPanic{}
+		}
+	}()
 
-	// not an envelope: it never will be
-	if err != nil {
-		msg.Term()
-		return
-	}
+	return handle(m)
+}
 
-	err = handle(m)
-	if err != nil {
-		msg.NakWithDelay(a.retry)
-		return
-	}
+// errPanic is a result handler that panicked.
+type errPanic struct{}
 
-	msg.Ack()
+// Error is the text of errPanic.
+func (e errPanic) Error() string {
+	return "beenats: the result handler panicked"
 }

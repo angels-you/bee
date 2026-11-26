@@ -1,5 +1,5 @@
 // Command nats sends one HLS video job to bee over NATS JetStream, or runs
-// a worker that prints every result.
+// a worker that prints every HLS result.
 //
 //	# terminal 1: the worker of your service
 //	go run ./examples/nats -work
@@ -9,7 +9,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -36,33 +35,34 @@ func main() {
 	}
 	defer c.Close()
 
-	// stops on ctrl+c
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-
-	// the worker
+	// the worker: prints results until ctrl+c
 	if *work {
-		err = c.Done(ctx, "example", show)
+		err = c.SubscribeStream(show)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "done:", err)
+			fmt.Fprintln(os.Stderr, "subscribe:", err)
 			os.Exit(1)
 		}
+
+		stop := make(chan os.Signal, 1)
+		signal.Notify(stop, os.Interrupt)
+		<-stop
 		return
 	}
 
 	// vertical 9:16 HLS with two renditions and a cover
-	job := video.Stream{
-		ID:         "clip-1",
+	job := video.StreamJob{
+		ID:         1,
 		Input:      *input,
 		Output:     "clips/1/index.m3u8",
 		Options:    video.VerticalOptions(),
 		Profiles:   video.VerticalMobile(),
 		HLS:        video.DefaultHLS(),
 		Thumbnails: []video.Thumbnail{{Output: "clips/1/cover.webp", Format: video.ImageWebP, Width: 720}},
+		Meta:       map[string]any{"clip": "first"},
 	}
 
 	// send and forget: the result comes to the worker
-	err = c.Stream(ctx, job)
+	err = c.GenerateStream(job)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "send:", err)
 		os.Exit(1)
@@ -70,17 +70,15 @@ func main() {
 	fmt.Println("sent", job.ID)
 }
 
-// show prints one result; returning nil acks it.
-func show(m proto.Envelope) error {
+// show prints one HLS result; failed jobs come here too.
+func show(res video.Result) {
 	// a failed job
-	e := m.Failure()
-	if e != nil {
-		fmt.Printf("%s %s failed: %s %s (retryable %v)\n", m.Kind, m.ID, e.Code, e.Message, e.Retryable)
-		return nil
+	if res.Error != nil {
+		fmt.Printf("%v failed: %s %s (retryable %v)\n", res.ID, res.Error.Code, res.Error.Message, res.Error.Retryable)
+		return
 	}
 
 	// a done job
-	out, _ := json.MarshalIndent(m.Result, "", "  ")
-	fmt.Printf("%s %s done:\n%s\n", m.Kind, m.ID, out)
-	return nil
+	out, _ := json.MarshalIndent(res, "", "  ")
+	fmt.Printf("%v done:\n%s\n", res.ID, out)
 }

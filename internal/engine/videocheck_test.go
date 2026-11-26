@@ -33,8 +33,8 @@ func (a *fixture) init(t *testing.T) {
 }
 
 // stream — a valid Stream: the mobile ladder, every optional part set.
-func (a *fixture) stream() job.Stream {
-	return job.Stream{
+func (a *fixture) stream() job.StreamJob {
+	return job.StreamJob{
 		ID:         "job-1",
 		Input:      "https://bucket.s3.example.com/in/source.mov?X-Amz-Signature=secret",
 		Output:     "/video/1111/index.m3u8",
@@ -47,9 +47,9 @@ func (a *fixture) stream() job.Stream {
 }
 
 // video — a valid Video of the 720p preset.
-func (a *fixture) video() job.Video {
+func (a *fixture) video() job.VideoJob {
 	p, _ := job.Preset(job.Quality720p)
-	return job.Video{
+	return job.VideoJob{
 		ID:      "job-2",
 		Input:   "https://bucket.s3.example.com/in/source.mov",
 		Output:  "video/1111/video.mp4",
@@ -59,7 +59,7 @@ func (a *fixture) video() job.Video {
 }
 
 // refuse — checkStream refuses j with code c and a message holding text.
-func (a *fixture) refuse(j job.Stream, c code.Code, text string) {
+func (a *fixture) refuse(j job.StreamJob, c code.Code, text string) {
 	a.t.Helper()
 	e := a.cfg.checkStream(&j)
 	switch {
@@ -76,7 +76,7 @@ func (a *fixture) refuse(j job.Stream, c code.Code, text string) {
 
 // refuseVideo — checkVideo refuses j with code c and a message holding
 // text.
-func (a *fixture) refuseVideo(j job.Video, c code.Code, text string) {
+func (a *fixture) refuseVideo(j job.VideoJob, c code.Code, text string) {
 	a.t.Helper()
 	e := a.cfg.checkVideo(&j)
 	switch {
@@ -95,7 +95,7 @@ func TestCheckStreamDefaults(t *testing.T) {
 	f := fixture{}
 	f.init(t)
 
-	j := job.Stream{
+	j := job.StreamJob{
 		ID:         "job-1",
 		Input:      "https://s3.example.com/in.mov",
 		Output:     "/video/1/index.m3u8",

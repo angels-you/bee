@@ -14,9 +14,10 @@ import (
 // of the original (presigned GET or any public https), logged without the
 // query
 type Job struct {
-	ID    string `json:"id"`
-	Input string `json:"input"` // url of the original
-	Tasks []Task `json:"tasks"` // at least one
+	ID    any            `json:"id"`             // a string or a number, returned as sent
+	Meta  map[string]any `json:"meta,omitempty"` // data of the caller, returned untouched in the result
+	Input string         `json:"input"`          // url of the original
+	Tasks []Task         `json:"tasks"`          // at least one
 }
 
 // Task is one result. ID and Output are unique within the job; Output is a

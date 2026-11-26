@@ -8,7 +8,7 @@ import (
 // Validate checks what a Stream needs before it is sent: the id, the url
 // of the original and the output key. bee checks everything else
 // (profiles, options, limits) when the job runs
-func (a *Stream) Validate() *code.Error {
+func (a *StreamJob) Validate() *code.Error {
 	_, url := tools.URL(a.Input)
 	_, key := tools.Key(a.Output)
 
@@ -27,7 +27,7 @@ func (a *Stream) Validate() *code.Error {
 // Validate checks what a Video needs before it is sent: the id, the url of
 // the original and the output key. bee checks everything else when the
 // job runs
-func (a *Video) Validate() *code.Error {
+func (a *VideoJob) Validate() *code.Error {
 	_, url := tools.URL(a.Input)
 	_, key := tools.Key(a.Output)
 

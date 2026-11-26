@@ -4,7 +4,7 @@
 //
 //	c := &beehttp.Client{URL: "http://bee:8080", Token: os.Getenv("BEE_TOKEN")}
 //
-//	res, err := c.Images(ctx, images.Job{
+//	res, err := c.GenerateImages(ctx, images.Job{
 //		ID:    "photo-1",
 //		Input: presignedURL,
 //		Tasks: []images.Task{{
@@ -26,6 +26,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/angels-you/bee/pkg/tools"
 	"io"
 	"net/http"
 	"strings"
@@ -46,32 +47,32 @@ type Client struct {
 	names proto.Names
 }
 
-// Audio runs an audio job.
-func (a *Client) Audio(ctx context.Context, j audio.Job) (audio.Result, error) {
+// GenerateAudio runs an audio job.
+func (a *Client) GenerateAudio(ctx context.Context, j audio.Job) (audio.Result, error) {
 	var res audio.Result
 	err := a.call(ctx, proto.Audio, j.ID, j, &res)
 
 	return res, err
 }
 
-// Stream runs an HLS job.
-func (a *Client) Stream(ctx context.Context, j video.Stream) (video.Result, error) {
+// GenerateStream runs an HLS job.
+func (a *Client) GenerateStream(ctx context.Context, j video.StreamJob) (video.Result, error) {
 	var res video.Result
 	err := a.call(ctx, proto.Stream, j.ID, j, &res)
 
 	return res, err
 }
 
-// Video runs an MP4 job.
-func (a *Client) Video(ctx context.Context, j video.Video) (video.Result, error) {
+// GenerateVideo runs an MP4 job.
+func (a *Client) GenerateVideo(ctx context.Context, j video.VideoJob) (video.Result, error) {
 	var res video.Result
 	err := a.call(ctx, proto.Video, j.ID, j, &res)
 
 	return res, err
 }
 
-// Images runs an images job.
-func (a *Client) Images(ctx context.Context, j images.Job) (images.Result, error) {
+// GenerateImages runs an images job.
+func (a *Client) GenerateImages(ctx context.Context, j images.Job) (images.Result, error) {
 	var res images.Result
 	err := a.call(ctx, proto.Images, j.ID, j, &res)
 
@@ -79,7 +80,7 @@ func (a *Client) Images(ctx context.Context, j images.Job) (images.Result, error
 }
 
 // call posts job to the path of kind and reads the result into res.
-func (a *Client) call(ctx context.Context, kind proto.Kind, id string, job, res any) error {
+func (a *Client) call(ctx context.Context, kind proto.Kind, id any, job, res any) error {
 
 	// the request
 	body, err := json.Marshal(job)
@@ -109,7 +110,7 @@ func (a *Client) call(ctx context.Context, kind proto.Kind, id string, job, res 
 
 	// the result and its error
 	e := proto.ErrorOf(data)
-	err = json.Unmarshal(data, res)
+	err = tools.Decode(data, res)
 
 	switch {
 	case err != nil:
@@ -125,7 +126,7 @@ func (a *Client) call(ctx context.Context, kind proto.Kind, id string, job, res 
 }
 
 // fail fills res as a failure and returns e.
-func (a *Client) fail(res any, id string, e *code.Error) error {
+func (a *Client) fail(res any, id any, e *code.Error) error {
 	proto.Failure(res, id, e)
 	return e
 }

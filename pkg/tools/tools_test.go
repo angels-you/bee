@@ -1,6 +1,9 @@
 package tools
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 // TestCleanKey checks that a storage key is normalized
 func TestCleanKey(t *testing.T) {
@@ -87,5 +90,43 @@ func TestID(t *testing.T) {
 		if ID(id) {
 			t.Errorf("%q accepted", id)
 		}
+	}
+}
+
+// TestIDNumbers checks numbers, other types and the text form of ids
+func TestIDNumbers(t *testing.T) {
+	good := []any{1, int64(9007199254740993), uint8(3), 2.0, json.Number("9007199254740993"), json.Number("12")}
+	for _, id := range good {
+		if !ID(id) {
+			t.Errorf("%v refused", id)
+		}
+	}
+
+	bad := []any{nil, true, 1.5, json.Number("1.5"), map[string]any{}, []any{1}}
+	for _, id := range bad {
+		if ID(id) {
+			t.Errorf("%v accepted", id)
+		}
+	}
+
+	text := map[string]any{
+		"abc":              "abc",
+		"9007199254740993": json.Number("9007199254740993"),
+		"42":               42,
+		"3":                3.0,
+	}
+	for want, id := range text {
+		if IDString(id) != want {
+			t.Errorf("%v as %q", id, IDString(id))
+		}
+	}
+}
+
+// TestDecode checks that numbers keep their digits
+func TestDecode(t *testing.T) {
+	var v map[string]any
+	err := Decode([]byte(`{"id":9007199254740993}`), &v)
+	if err != nil || v["id"] != json.Number("9007199254740993") {
+		t.Errorf("decode %v %v", v, err)
 	}
 }

@@ -2,7 +2,9 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/angels-you/bee/pkg/proto"
 	"log/slog"
 	"net"
@@ -20,10 +22,11 @@ import (
 // uploads, metrics, logs
 type work struct {
 	engine *Engine
-	kind   string // audio, stream, video, images
-	id     string
-	input  string // source url, logged without query
-	output string // job entry object (master playlist, mp4); empty for images
+	kind   string         // audio, stream, video, images
+	id     any            // job id as sent: a string or a number
+	meta   map[string]any // data of the caller, returned untouched, never logged
+	input  string         // source url, logged without query
+	output string         // job entry object (master playlist, mp4); empty for images
 	start  time.Time
 	dir    string // job temp folder
 	log    *slog.Logger
@@ -42,16 +45,17 @@ type work struct {
 }
 
 // newWork creates the job state; the job is counted as accepted
-func (a *Engine) newWork(kind proto.Kind, id, input string) *work {
+func (a *Engine) newWork(kind proto.Kind, id any, input string, meta map[string]any) *work {
 	a.Metrics.started(string(kind))
 
 	return &work{
 		engine: a,
 		kind:   string(kind),
 		id:     id,
+		meta:   meta,
 		input:  input,
 		start:  time.Now(),
-		log:    a.log.With("job_id", id, "worker_id", a.cfg.WorkerID, "type", kind),
+		log:    a.log.With("job_id", tools.IDString(id), "worker_id", a.cfg.WorkerID, "type", kind),
 	}
 }
 
@@ -195,4 +199,21 @@ func (a *work) processing(t time.Time) {
 	elapsed := time.Since(t)
 	a.processMs += elapsed.Milliseconds()
 	a.engine.Metrics.processed(a.kind, elapsed)
+}
+
+// checkMeta refuses a meta bigger than the limit of the engine in json
+func (a *work) checkMeta() *code.Error {
+	if a.meta == nil {
+		return nil
+	}
+
+	data, err := json.Marshal(a.meta)
+	switch {
+	case err != nil:
+		return code.New(code.InvalidJob, "meta is not json", nil)
+	case len(data) > a.engine.metaLimit:
+		return code.New(code.InvalidJob, fmt.Sprintf("meta is %d bytes of json, more than %d", len(data), a.engine.metaLimit), nil)
+	}
+
+	return nil
 }

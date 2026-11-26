@@ -30,11 +30,12 @@ import (
 // Engine runs jobs of all types. It is safe for concurrent use;
 // BEE_CONCURRENCY limits how many jobs run at once
 type Engine struct {
-	cfg     *config.Config
-	storage storage.Storage
-	log     *slog.Logger
-	slots   chan struct{}
-	down    map[proto.Kind]*storage.Downloader // by job type: each has its own size limit
+	cfg       *config.Config
+	storage   storage.Storage
+	log       *slog.Logger
+	slots     chan struct{}
+	metaLimit int                                // the largest meta of a job, bytes of json
+	down      map[proto.Kind]*storage.Downloader // by job type: each has its own size limit
 
 	audio  audiotool.Tools
 	video  *videotool.Tools
@@ -55,11 +56,12 @@ func New(cfg *config.Config, st storage.Storage, log *slog.Logger) (*Engine, err
 	}
 
 	a := &Engine{
-		cfg:     cfg,
-		storage: st,
-		log:     log,
-		slots:   make(chan struct{}, cfg.Concurrency),
-		Metrics: &Metrics{},
+		cfg:       cfg,
+		storage:   st,
+		log:       log,
+		slots:     make(chan struct{}, cfg.Concurrency),
+		metaLimit: 16 << 10,
+		Metrics:   &Metrics{},
 	}
 	a.Metrics.init()
 

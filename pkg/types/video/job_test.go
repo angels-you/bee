@@ -128,7 +128,7 @@ func TestEstimatedBytes(t *testing.T) {
 // TestJSON — snake_case keys, the key as base64, the error of a failed
 // result without its cause.
 func TestJSON(t *testing.T) {
-	s := Stream{
+	s := StreamJob{
 		ID:       "j1",
 		Input:    "https://s3.example.com/in.mov",
 		Output:   "video/1/index.m3u8",
@@ -146,7 +146,7 @@ func TestJSON(t *testing.T) {
 		}
 	}
 
-	var back Stream
+	var back StreamJob
 	err = json.Unmarshal(js, &back)
 	if err != nil {
 		t.Fatal(err)
@@ -191,19 +191,19 @@ func TestParams(t *testing.T) {
 
 // TestValidate checks the light checks of Stream and Video
 func TestValidate(t *testing.T) {
-	s := Stream{ID: "s1", Input: "https://example.com/a.mov", Output: "v/1/index.m3u8"}
+	s := StreamJob{ID: "s1", Input: "https://example.com/a.mov", Output: "v/1/index.m3u8"}
 	e := s.Validate()
 	if e != nil {
 		t.Errorf("stream: %v", e)
 	}
 
-	v := Video{ID: "v1", Input: "https://example.com/a.mov", Output: "v/1/video.mp4"}
+	v := VideoJob{ID: "v1", Input: "https://example.com/a.mov", Output: "v/1/video.mp4"}
 	e = v.Validate()
 	if e != nil {
 		t.Errorf("video: %v", e)
 	}
 
-	bad := []Video{
+	bad := []VideoJob{
 		{ID: "", Input: "https://example.com/a.mov", Output: "a.mp4"},
 		{ID: "v", Input: "a.mov", Output: "a.mp4"},
 		{ID: "v", Input: "https://example.com/a.mov", Output: "a/../b.mp4"},

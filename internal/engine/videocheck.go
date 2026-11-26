@@ -27,7 +27,7 @@ type videoCheck struct {
 // trimmed). The slices and pointers of the job are copied first, so the
 // caller's job stays as it was. Whether the ffmpeg build encodes the
 // codecs is not checked here (video.Tools.CanEncode).
-func (a *videoCheck) checkStream(j *job.Stream) *code.Error {
+func (a *videoCheck) checkStream(j *job.StreamJob) *code.Error {
 	j.Profiles = slices.Clone(j.Profiles)
 	j.Thumbnails = slices.Clone(j.Thumbnails)
 	if j.Preview != nil {
@@ -112,7 +112,7 @@ func (a *videoCheck) checkStream(j *job.Stream) *code.Error {
 
 // checkVideo — a Video job against the job contract and the config,
 // normalized in place like checkStream.
-func (a *videoCheck) checkVideo(j *job.Video) *code.Error {
+func (a *videoCheck) checkVideo(j *job.VideoJob) *code.Error {
 	j.Thumbnails = slices.Clone(j.Thumbnails)
 	if j.Preview != nil {
 		preview := *j.Preview

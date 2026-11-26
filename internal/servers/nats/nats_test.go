@@ -3,6 +3,7 @@ package nats_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/angels-you/bee/pkg/tools"
 	"log/slog"
 	"testing"
 	"time"
@@ -74,8 +75,8 @@ func TestConsumer(t *testing.T) {
 		}
 
 		var m proto.Envelope
-		json.Unmarshal(msg.Data(), &m)
-		got[m.ID] = m
+		tools.Decode(msg.Data(), &m)
+		got[tools.IDString(m.ID)] = m
 	}
 
 	res, err := got["n1"].Images()
@@ -90,10 +91,10 @@ func TestConsumer(t *testing.T) {
 	switch {
 	case bad.Kind != proto.Audio:
 		t.Errorf("n2 kind %q", bad.Kind)
-	case bad.Failure() == nil:
+	case proto.ErrorOf(bad.Result) == nil:
 		t.Error("n2 has no error")
-	case bad.Failure().Code != "INVALID_JOB":
-		t.Errorf("n2 code %s", bad.Failure().Code)
+	case proto.ErrorOf(bad.Result).Code != "INVALID_JOB":
+		t.Errorf("n2 code %s", proto.ErrorOf(bad.Result).Code)
 	}
 
 	// nothing more: the garbage was terminated

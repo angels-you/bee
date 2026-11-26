@@ -2,6 +2,7 @@ package proto
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -54,8 +55,8 @@ func TestEnvelope(t *testing.T) {
 		t.Fatal(err)
 	case len(res.Tasks) != 1:
 		t.Errorf("tasks %+v", res.Tasks)
-	case m.Failure() != nil:
-		t.Error("a done job has a failure")
+	case res.Error != nil:
+		t.Error("a done job has an error")
 	}
 
 	// another kind
@@ -72,7 +73,46 @@ func TestEnvelope(t *testing.T) {
 		t.Fatal(err)
 	case vr.Error == nil:
 		t.Error("no error in the result")
-	case stream.Failure().Code != "INVALID_JOB":
-		t.Errorf("failure %v", stream.Failure())
+	case vr.Error.Code != "INVALID_JOB":
+		t.Errorf("error %v", vr.Error)
+	}
+}
+
+// TestSubscriber checks the consumer names of the subscriber groups
+func TestSubscriber(t *testing.T) {
+	var n Names
+
+	name, err := n.Subscriber("billing", Audio)
+	switch {
+	case err != nil:
+		t.Fatal(err)
+	case name != "BEE_DONE_BILLING_AUDIO":
+		t.Errorf("name %s", name)
+	}
+
+	_, err = n.Subscriber("a.b", Audio)
+	if err == nil {
+		t.Error("a dotted group accepted")
+	}
+}
+
+// TestEnvelopeID checks that a number id stays the same number
+func TestEnvelopeID(t *testing.T) {
+	in := `{"kind":"audio","id":9007199254740993,"result":{"id":9007199254740993,"meta":{"n":9007199254740993}}}`
+
+	var m Envelope
+	err := json.Unmarshal([]byte(in), &m)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := m.Audio()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, _ := json.Marshal(res)
+	if !strings.Contains(string(out), `"id":9007199254740993`) || !strings.Contains(string(out), `"n":9007199254740993`) {
+		t.Errorf("id or meta changed: %s", out)
 	}
 }

@@ -3,8 +3,13 @@
 package tools
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"math"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -78,26 +83,89 @@ func SafeURL(raw string) string {
 	return u.String()
 }
 
-// ID reports whether id is a valid job id: 1..128 printable characters
-// (letters of any script, digits, punctuation, spaces), no line breaks or
-// other control characters; the same rule on every transport
-func ID(id string) bool {
-	// valid utf-8 of 1..128 characters
+// ID reports whether id is a valid job id: a string of 1..128 printable
+// characters (any script, spaces, no line breaks or other control
+// characters) or a whole number (an int type, a float without a fraction,
+// json.Number). nil, bool, objects, arrays and the empty string are not.
+// The same rule on every transport
+func ID(id any) bool {
+	switch v := id.(type) {
+	case string:
+		return idText(v)
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		return true
+	case float32:
+		return float64(v) == math.Trunc(float64(v))
+	case float64:
+		return v == math.Trunc(v) && !math.IsInf(v, 0)
+	case json.Number:
+		return idNumber(v)
+	}
+
+	return false
+}
+
+// IDString is the id as text for logs and metrics: a string as is, a
+// number in its digits
+func IDString(id any) string {
+	switch v := id.(type) {
+	case string:
+		return v
+	case json.Number:
+		return v.String()
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case float32:
+		return strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case nil:
+		return ""
+	}
+
+	return fmt.Sprint(id)
+}
+
+// idText reports whether s is 1..128 printable characters of valid utf-8
+func idText(s string) bool {
 	switch {
-	case !utf8.ValidString(id):
+	case !utf8.ValidString(s):
 		return false
-	case id == "":
+	case s == "":
 		return false
-	case utf8.RuneCountInString(id) > 128:
+	case utf8.RuneCountInString(s) > 128:
 		return false
 	}
 
 	// printable only
-	for _, r := range id {
+	for _, r := range s {
 		if !unicode.IsPrint(r) {
 			return false
 		}
 	}
 
 	return true
+}
+
+// idNumber reports whether n is a whole number: an integer of any size or
+// a float without a fraction
+func idNumber(n json.Number) bool {
+	_, err := strconv.ParseInt(n.String(), 10, 64)
+	if err == nil {
+		return true
+	}
+
+	f, err := n.Float64()
+	if err != nil {
+		return false
+	}
+
+	return f == math.Trunc(f) && !math.IsInf(f, 0)
+}
+
+// Decode reads json into v keeping numbers as json.Number: a job id or a
+// meta value comes back exactly as it was sent, big integers included
+func Decode(data []byte, v any) error {
+	d := json.NewDecoder(bytes.NewReader(data))
+	d.UseNumber()
+
+	return d.Decode(v)
 }

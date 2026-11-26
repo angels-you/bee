@@ -268,11 +268,11 @@ func (a *Consumer) handle(work context.Context, msg jetstream.Msg) {
 	e := code.As(err)
 	switch {
 	case err != nil && work.Err() != nil:
-		a.log.Warn("nats: unfinished at shutdown, back to the queue", "job_id", id, "delivered", meta.NumDelivered)
+		a.log.Warn("nats: unfinished at shutdown, back to the queue", "job_id", tools.IDString(id), "delivered", meta.NumDelivered)
 		a.settle(msg.Nak(), "nak", id)
 	case err != nil && e.Code.Redeliver() && meta.NumDelivered < uint64(a.cfg.MaxDeliver):
 		delay := a.backoff(meta.NumDelivered)
-		a.log.Info("nats: retry later", "job_id", id, "delivered", meta.NumDelivered, "error_code", string(e.Code), "delay_ms", delay.Milliseconds())
+		a.log.Info("nats: retry later", "job_id", tools.IDString(id), "delivered", meta.NumDelivered, "error_code", string(e.Code), "delay_ms", delay.Milliseconds())
 		a.settle(msg.NakWithDelay(delay), "nak", id)
 	default:
 		a.report(msg, proto.Envelope{Kind: in.Kind, ID: id, Result: res}, meta.NumDelivered)
@@ -283,15 +283,15 @@ func (a *Consumer) handle(work context.Context, msg jetstream.Msg) {
 // is not an envelope, has an unknown kind or a job without a valid id is
 // terminated and logged (ok false): there is nobody to report to. The
 // data itself is never logged: it may hold a presigned url
-func (a *Consumer) open(msg jetstream.Msg) (in proto.Envelope, id string, ok bool) {
+func (a *Consumer) open(msg jetstream.Msg) (in proto.Envelope, id any, ok bool) {
 	err := json.Unmarshal(msg.Data(), &in)
 
 	// the id of the job inside
 	var head struct {
-		ID string `json:"id"`
+		ID any `json:"id"`
 	}
 	if err == nil {
-		json.Unmarshal(in.Job, &head)
+		tools.Decode(in.Job, &head)
 	}
 
 	switch {
@@ -306,7 +306,7 @@ func (a *Consumer) open(msg jetstream.Msg) (in proto.Envelope, id string, ok boo
 	}
 
 	a.settle(msg.Term(), "term", "")
-	return in, "", false
+	return in, nil, false
 }
 
 // release frees the slot of a finished delivery.
@@ -324,7 +324,7 @@ func (a *Consumer) report(msg jetstream.Msg, out proto.Envelope, delivered uint6
 	// the envelope
 	data, err := json.Marshal(out)
 	if err != nil {
-		a.log.Error("nats: result json", "job_id", out.ID, "error", err.Error())
+		a.log.Error("nats: result json", "job_id", tools.IDString(out.ID), "error", err.Error())
 		a.settle(msg.Term(), "term", out.ID)
 		return
 	}
@@ -332,7 +332,7 @@ func (a *Consumer) report(msg jetstream.Msg, out proto.Envelope, delivered uint6
 	// the result
 	_, err = a.js.Publish(ctx, a.names.DoneSubject(), data)
 	if err != nil {
-		a.log.Warn("nats: result not published, retry later", "job_id", out.ID, "error", err.Error())
+		a.log.Warn("nats: result not published, retry later", "job_id", tools.IDString(out.ID), "error", err.Error())
 		a.settle(msg.NakWithDelay(a.backoff(delivered)), "nak", out.ID)
 		return
 	}
@@ -343,9 +343,9 @@ func (a *Consumer) report(msg jetstream.Msg, out proto.Envelope, delivered uint6
 
 // settle logs a failed ack, nak or term: JetStream redelivers the
 // message after AckWait.
-func (a *Consumer) settle(err error, what, id string) {
+func (a *Consumer) settle(err error, what string, id any) {
 	if err != nil {
-		a.log.Warn("nats: "+what+" failed, the message comes back after the ack wait", "job_id", id, "error", err.Error())
+		a.log.Warn("nats: "+what+" failed, the message comes back after the ack wait", "job_id", tools.IDString(id), "error", err.Error())
 	}
 }
 

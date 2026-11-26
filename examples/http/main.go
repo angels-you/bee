@@ -39,7 +39,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
-	res, err := c.Images(ctx, job)
+	res, err := c.GenerateImages(ctx, job)
 	if err != nil {
 		e := code.As(err)
 		fmt.Fprintf(os.Stderr, "failed: %s %s (retryable %v)\n", e.Code, e.Message, e.Retryable)

@@ -33,18 +33,18 @@ func main() {
 
 	// HLS renditions, a waveform and the metadata; the keys must be new
 	job := audio.Job{
-		ID:      "track-1",
-		Input:   *input,
-		Output:  "tracks/1/master.m3u8",
-		Wave:    "tracks/1/wave.json",
-		Meta:    "tracks/1/meta.json",
-		Options: audio.Options{Normalize: true},
+		ID:       "track-1",
+		Input:    *input,
+		Output:   "tracks/1/master.m3u8",
+		Wave:     "tracks/1/wave.json",
+		Metadata: "tracks/1/meta.json",
+		Options:  audio.Options{Normalize: true},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 	defer cancel()
 
-	res, err := c.Audio(ctx, job)
+	res, err := c.GenerateAudio(ctx, job)
 	if err != nil {
 		e := code.As(err)
 		fmt.Fprintf(os.Stderr, "failed: %s %s (retryable %v)\n", e.Code, e.Message, e.Retryable)

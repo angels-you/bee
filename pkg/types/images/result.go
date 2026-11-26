@@ -8,15 +8,16 @@ import "github.com/angels-you/bee/pkg/types/code"
 // download, format and pixel size after reading the header (already with
 // EXIF rotation applied)
 type Result struct {
-	ID           string       `json:"id"`
-	Tasks        []TaskResult `json:"tasks,omitempty"`
-	Elapsed      int64        `json:"elapsed"` // milliseconds for the whole job
-	SHA256       string       `json:"sha256,omitempty"`
-	SourceSize   int64        `json:"source_size,omitempty"`   // bytes
-	SourceFormat Format       `json:"source_format,omitempty"` // jpg, png, webp, avif, heic, heif, tiff, gif
-	SourceWidth  int          `json:"source_width,omitempty"`
-	SourceHeight int          `json:"source_height,omitempty"`
-	Error        *code.Error  `json:"error,omitempty"`
+	ID           any            `json:"id"`             // the job id as sent
+	Meta         map[string]any `json:"meta,omitempty"` // the job meta as sent
+	Tasks        []TaskResult   `json:"tasks,omitempty"`
+	Elapsed      int64          `json:"elapsed"` // milliseconds for the whole job
+	SHA256       string         `json:"sha256,omitempty"`
+	SourceSize   int64          `json:"source_size,omitempty"`   // bytes
+	SourceFormat Format         `json:"source_format,omitempty"` // jpg, png, webp, avif, heic, heif, tiff, gif
+	SourceWidth  int            `json:"source_width,omitempty"`
+	SourceHeight int            `json:"source_height,omitempty"`
+	Error        *code.Error    `json:"error,omitempty"`
 }
 
 // TaskResult is one saved result, in Job.Tasks order. Quality is the

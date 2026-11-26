@@ -59,7 +59,7 @@ func TestAudio(t *testing.T) {
 	ctx := context.Background()
 
 	j := f.bench.Audio("a1", "tracks/1")
-	j.Meta = "tracks/1/meta.json"
+	j.Metadata = "tracks/1/meta.json"
 	j.Analysis = "tracks/1/analysis.json"
 
 	res, err := f.bench.Engine.Audio(ctx, j)
@@ -83,7 +83,7 @@ func TestAudio(t *testing.T) {
 		t.Error("no size")
 	case res.Encrypted:
 		t.Error("plain job is encrypted")
-	case res.Meta == nil:
+	case res.Metadata == nil:
 		t.Error("no metadata")
 	case res.Loudness == nil:
 		t.Error("no loudness")
@@ -504,5 +504,43 @@ func TestResultJSON(t *testing.T) {
 
 	if !strings.Contains(string(data), `"code":"INVALID_JOB"`) {
 		t.Errorf("result %s", data)
+	}
+}
+
+// TestMeta checks that the meta comes back untouched, also on a failure,
+// and that a too big meta is refused
+func TestMeta(t *testing.T) {
+	f := fixture{}
+	f.init(t)
+	ctx := context.Background()
+
+	// a failure keeps id and meta
+	j := f.bench.Images("m1", "meta/1")
+	j.ID = 77
+	j.Meta = map[string]any{"user": "u1"}
+	j.Input = f.bench.URL("missing.tif")
+
+	res, _ := f.bench.Engine.Images(ctx, j)
+	switch {
+	case res.ID != 77:
+		t.Errorf("id %v", res.ID)
+	case res.Meta["user"] != "u1":
+		t.Errorf("meta %v", res.Meta)
+	}
+
+	// a meta above 16 KB of json
+	j = f.bench.Images("m2", "meta/2")
+	j.Meta = map[string]any{"big": strings.Repeat("x", 17<<10)}
+
+	_, err := f.bench.Engine.Images(ctx, j)
+	if f.codeOf(err) != code.InvalidJob {
+		t.Errorf("big meta: %v", err)
+	}
+
+	// json in, json out: the number id stays the same number
+	in := []byte(`{"id":9007199254740993,"meta":{"n":9007199254740993},"input":"x","tasks":[]}`)
+	out, _ := f.bench.Engine.Do(ctx, "images", in)
+	if !strings.Contains(string(out), `"id":9007199254740993`) || !strings.Contains(string(out), `"n":9007199254740993`) {
+		t.Errorf("result %s", out)
 	}
 }

@@ -17,8 +17,8 @@ type Kind string
 
 const (
 	Audio  Kind = "audio"  // audio.Job → audio.Result
-	Stream Kind = "stream" // video.Stream → video.Result
-	Video  Kind = "video"  // video.Video → video.Result
+	Stream Kind = "stream" // video.StreamJob → video.Result
+	Video  Kind = "video"  // video.VideoJob → video.Result
 	Images Kind = "images" // images.Job → images.Result
 )
 
@@ -156,4 +156,17 @@ func (a Names) Consumer() string {
 // name is a subject as a JetStream name: dots to _, upper case
 func (a Names) name(subject string) string {
 	return strings.ToUpper(strings.ReplaceAll(subject, ".", "_"))
+}
+
+// Subscriber is the durable consumer of the results of kind for a group of
+// subscribers: <done stream>_<GROUP>_<KIND>, for example
+// BEE_DONE_DEFAULT_AUDIO. Every instance of a service with the same group
+// shares the results; another group gets its own copy. The group is a
+// token of A-Z, a-z, 0-9, _ and -
+func (a Names) Subscriber(group string, kind Kind) (string, error) {
+	if !a.token(group) {
+		return "", fmt.Errorf("subscriber group %q: A-Z, a-z, 0-9, _ and - only", group)
+	}
+
+	return a.DoneStream() + "_" + strings.ToUpper(group) + "_" + strings.ToUpper(string(kind)), nil
 }

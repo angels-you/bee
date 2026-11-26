@@ -14,7 +14,7 @@ import (
 // Job is one track. Input is the url of the original (presigned GET or any
 // public https), logged without the query.
 //
-// Result keys (Output, Wave, Meta, Analysis) are chosen by the client: they
+// Result keys (Output, Wave, Metadata, Analysis) are chosen by the client: they
 // are keys in the bee storage (not a bucket and not an endpoint). Output is
 // required, the rest are not: a set key gets its result published there, an
 // empty one is skipped. If a master playlist already exists at Output, the
@@ -24,8 +24,9 @@ import (
 // encrypted, without it HLS is published in the clear; it is never logged
 // and never stored
 type Job struct {
-	ID    string `json:"id"`
-	Input string `json:"input"` // url of the original
+	ID    any            `json:"id"`             // a string or a number, returned as sent
+	Meta  map[string]any `json:"meta,omitempty"` // data of the caller, returned untouched in the result
+	Input string         `json:"input"`          // url of the original
 
 	// Output is the master playlist key (.m3u8); each rendition lives next
 	// to it in a folder named after its bitrate in kbit/s:
@@ -33,7 +34,7 @@ type Job struct {
 	Output string `json:"output"`
 
 	Wave     string `json:"wave,omitempty"`     // waveform json key; empty — no waveform (and no Result.Waveform)
-	Meta     string `json:"meta,omitempty"`     // metadata json key; empty — not published
+	Metadata string `json:"metadata,omitempty"` // metadata json key; empty — not published
 	Analysis string `json:"analysis,omitempty"` // analysis json key; empty — not published
 
 	Key    []byte `json:"key,omitempty"`     // empty (clear HLS) or exactly 16 bytes; base64 in json
@@ -122,7 +123,7 @@ func (a *Job) validateKeys() *code.Error {
 	}
 
 	// metadata
-	e = a.cleanKey("meta", &a.Meta, taken)
+	e = a.cleanKey("metadata", &a.Metadata, taken)
 	if e != nil {
 		return e
 	}

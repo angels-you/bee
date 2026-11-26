@@ -298,8 +298,8 @@ func (a *Bench) Audio(id, dir string) audio.Job {
 }
 
 // Stream returns a small single-variant Stream from source.mp4 at <dir>/index.m3u8
-func (a *Bench) Stream(id, dir string) video.Stream {
-	return video.Stream{
+func (a *Bench) Stream(id, dir string) video.StreamJob {
+	return video.StreamJob{
 		ID:       id,
 		Input:    a.URL("source.mp4"),
 		Output:   dir + "/index.m3u8",
@@ -310,8 +310,8 @@ func (a *Bench) Stream(id, dir string) video.Stream {
 }
 
 // Video returns a small MP4 from source.mp4 at <dir>/video.mp4
-func (a *Bench) Video(id, dir string) video.Video {
-	return video.Video{
+func (a *Bench) Video(id, dir string) video.VideoJob {
+	return video.VideoJob{
 		ID:      id,
 		Input:   a.URL("source.mp4"),
 		Output:  dir + "/video.mp4",

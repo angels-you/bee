@@ -18,7 +18,7 @@ func (a fixture) job() Job {
 		Input:    "https://example.com/a.wav?X-Amz-Signature=1",
 		Output:   "/tracks/1/master.m3u8",
 		Wave:     "tracks/1/wave.json",
-		Meta:     "tracks/1/meta.json",
+		Metadata: "tracks/1/meta.json",
 		Analysis: "tracks/1/analysis.json",
 	}
 }
@@ -69,7 +69,7 @@ func TestRefuse(t *testing.T) {
 		"output not hls": {func(j *Job) { j.Output = "a/master.mp4" }, code.InvalidPath},
 		"dirty output":   {func(j *Job) { j.Output = "a/../master.m3u8" }, code.InvalidPath},
 		"dirty wave":     {func(j *Job) { j.Wave = "a//wave.json" }, code.InvalidPath},
-		"same keys":      {func(j *Job) { j.Meta = j.Wave }, code.InvalidPath},
+		"same keys":      {func(j *Job) { j.Metadata = j.Wave }, code.InvalidPath},
 		"short key":      {func(j *Job) { j.Key = []byte("short"); j.KeyURI = "skd://1" }, code.InvalidJob},
 		"key no uri":     {func(j *Job) { j.Key = []byte("0123456789abcdef") }, code.InvalidJob},
 		"key bad uri":    {func(j *Job) { j.Key = []byte("0123456789abcdef"); j.KeyURI = "skd://\"1" }, code.InvalidJob},

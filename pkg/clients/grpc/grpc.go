@@ -7,7 +7,7 @@
 //	}
 //	defer c.Close()
 //
-//	res, err := c.Audio(ctx, audio.Job{
+//	res, err := c.GenerateAudio(ctx, audio.Job{
 //		ID:     "track-1",
 //		Input:  presignedURL,
 //		Output: "tracks/1/master.m3u8",
@@ -21,6 +21,7 @@ package beegrpc
 import (
 	"context"
 	"encoding/json"
+	"github.com/angels-you/bee/pkg/tools"
 	"strings"
 
 	"google.golang.org/grpc"
@@ -67,32 +68,32 @@ func (a *Client) Close() error {
 	return a.conn.Close()
 }
 
-// Audio runs an audio job.
-func (a *Client) Audio(ctx context.Context, j audio.Job) (audio.Result, error) {
+// GenerateAudio runs an audio job.
+func (a *Client) GenerateAudio(ctx context.Context, j audio.Job) (audio.Result, error) {
 	var res audio.Result
 	err := a.call(ctx, proto.Audio, j.ID, j, &res)
 
 	return res, err
 }
 
-// Stream runs an HLS job.
-func (a *Client) Stream(ctx context.Context, j video.Stream) (video.Result, error) {
+// GenerateStream runs an HLS job.
+func (a *Client) GenerateStream(ctx context.Context, j video.StreamJob) (video.Result, error) {
 	var res video.Result
 	err := a.call(ctx, proto.Stream, j.ID, j, &res)
 
 	return res, err
 }
 
-// Video runs an MP4 job.
-func (a *Client) Video(ctx context.Context, j video.Video) (video.Result, error) {
+// GenerateVideo runs an MP4 job.
+func (a *Client) GenerateVideo(ctx context.Context, j video.VideoJob) (video.Result, error) {
 	var res video.Result
 	err := a.call(ctx, proto.Video, j.ID, j, &res)
 
 	return res, err
 }
 
-// Images runs an images job.
-func (a *Client) Images(ctx context.Context, j images.Job) (images.Result, error) {
+// GenerateImages runs an images job.
+func (a *Client) GenerateImages(ctx context.Context, j images.Job) (images.Result, error) {
 	var res images.Result
 	err := a.call(ctx, proto.Images, j.ID, j, &res)
 
@@ -100,7 +101,7 @@ func (a *Client) Images(ctx context.Context, j images.Job) (images.Result, error
 }
 
 // call sends job to the method of kind and reads the result into res.
-func (a *Client) call(ctx context.Context, kind proto.Kind, id string, job, res any) error {
+func (a *Client) call(ctx context.Context, kind proto.Kind, id any, job, res any) error {
 	data, err := json.Marshal(job)
 	if err != nil {
 		return a.fail(res, id, code.New(code.InvalidJob, "job json", err))
@@ -119,7 +120,7 @@ func (a *Client) call(ctx context.Context, kind proto.Kind, id string, job, res 
 	}
 
 	// the result
-	err = json.Unmarshal(out.GetJson(), res)
+	err = tools.Decode(out.GetJson(), res)
 	if err != nil {
 		return a.fail(res, id, code.New(code.InternalTemporaryError, "bee grpc: unreadable result", err))
 	}
@@ -164,7 +165,7 @@ func (a *Client) error(err error, trailer metadata.MD) *code.Error {
 }
 
 // fail fills res as a failure and returns e.
-func (a *Client) fail(res any, id string, e *code.Error) error {
+func (a *Client) fail(res any, id any, e *code.Error) error {
 	proto.Failure(res, id, e)
 	return e
 }
