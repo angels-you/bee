@@ -1,3 +1,9 @@
 source/
 rules.md
 .DS_Store
+
+# local runs and builds
+/out/
+/bee
+*.test
+*.out
