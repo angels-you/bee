@@ -180,7 +180,7 @@ func (a Tools) steps(p Profile, src Source, g Geometry) ([]step, error) {
 // flattens transparency onto BackgroundColor (black when empty); avif is
 // 8-bit, the widest supported depth, encoded with effort (vips 0..9).
 func (a Tools) save(p Profile, quality int) string {
-	// усилие avif: из профиля job, иначе дефолт bee
+	// avif effort: from the job profile, else the bee default
 	effort := a.AvifEffort
 	if p.Effort != nil {
 		effort = *p.Effort

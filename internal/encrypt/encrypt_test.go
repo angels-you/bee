@@ -69,7 +69,7 @@ func (a *fixture) decrypt(t *testing.T, data, iv []byte) []byte {
 	return out[:len(out)-pad]
 }
 
-// hls — шифрование тестовым ключом
+// hls returns encryption with the test key
 func (a *fixture) hls(t *testing.T) *encrypt.HLS {
 	t.Helper()
 

@@ -1,12 +1,12 @@
-// Package engine — ядро bee: слоты concurrency и очередь QueueWait,
-// таймаут job, временная папка, загрузка оригинала, загрузка результатов
-// волнами, журнал результатов и метрики, общие для всех типов. Сами
-// пайплайны — audio.go (ffmpeg, HLS аудио), video.go (ffmpeg, HLS и MP4),
-// images.go (vips); инструменты обработки — в подпакетах audio, video,
-// images. Транспорты вызывают только Audio, Stream, Video и Images.
+// Package engine is the core of bee: concurrency slots and the QueueWait queue,
+// job timeout, temp folder, source download, result uploads in waves,
+// the result ledger and metrics, shared by all types. The pipelines
+// themselves are audio.go (ffmpeg, audio HLS), video.go (ffmpeg, HLS and MP4),
+// images.go (vips); processing tools live in the subpackages audio, video,
+// images. Transports call only Audio, Stream, Video and Images.
 //
-// Параметры обработки job накладываются поверх дефолтов конфига, лимиты
-// сервера берутся только из конфига
+// Job processing parameters are applied over the config defaults, server
+// limits come from the config only
 package engine
 
 import (
@@ -27,26 +27,26 @@ import (
 	"github.com/angels-you/bee/pkg/types/code"
 )
 
-// Ledger — результаты готовых job, их хранит транспорт (nats — в
-// key-value JetStream). Job сохраняет результат прямо перед публикацией
-// своего входного объекта (master playlist, mp4). Job, которая находит
-// вход уже опубликованным, ищет свой результат: нашла — job уже была
-// выполнена (передоставка после потерянного ack или падения), результат
-// возвращается снова; не нашла — ключи чужие: ALREADY_EXISTS
+// Ledger holds the results of finished jobs, kept by the transport (nats: in
+// JetStream key-value). A job saves its result right before publishing
+// its entry object (master playlist, mp4). A job that finds its entry
+// already published looks up its result: found means the job was already
+// done (redelivery after a lost ack or a crash) and the result is
+// returned again; not found means the keys belong to someone else: ALREADY_EXISTS
 type Ledger interface {
 	Save(ctx context.Context, key string, value []byte) error
 	Load(ctx context.Context, key string) (value []byte, found bool, err error)
 }
 
-// Engine — выполняет job всех типов. Безопасен для одновременного
-// использования; BEE_CONCURRENCY ограничивает job одновременно
+// Engine runs jobs of all types. It is safe for concurrent use;
+// BEE_CONCURRENCY limits how many jobs run at once
 type Engine struct {
 	cfg     *config.Config
 	storage storage.Storage
 	ledger  Ledger
 	log     *slog.Logger
 	slots   chan struct{}
-	down    map[proto.Kind]*storage.Downloader // по типу job: у каждого свой лимит размера
+	down    map[proto.Kind]*storage.Downloader // by job type: each has its own size limit
 
 	audio  audiotool.Tools
 	video  *videotool.Tools
@@ -55,8 +55,8 @@ type Engine struct {
 	Metrics *Metrics
 }
 
-// New — движок по конфигу: временная папка, проверка ffmpeg и vips.
-// ledger может быть nil: тогда опубликованный вход всегда
+// New builds the engine from the config: temp folder, ffmpeg and vips checks.
+// ledger may be nil: then a published entry is always
 // ALREADY_EXISTS
 func New(cfg *config.Config, st storage.Storage, ledger Ledger, log *slog.Logger) (*Engine, error) {
 	switch {
@@ -78,31 +78,31 @@ func New(cfg *config.Config, st storage.Storage, ledger Ledger, log *slog.Logger
 	}
 	a.Metrics.init()
 
-	// временная папка
+	// temp folder
 	err := os.MkdirAll(cfg.TempDir, 0o755)
 	if err != nil {
 		return nil, fmt.Errorf("engine: temp dir: %w", err)
 	}
 
-	// инструменты
+	// tools
 	err = a.tools()
 	if err != nil {
 		return nil, err
 	}
 
-	// загрузчики оригиналов
+	// source downloaders
 	a.downloaders()
 	return a, nil
 }
 
-// tools — ffmpeg для аудио и видео, vips для картинок; всё проверяется
-// один раз при старте: чего нет — bee не стартует, а не роняет job
+// tools checks ffmpeg for audio and video, vips for images; everything is checked
+// once at startup: if something is missing bee does not start, rather than failing jobs
 func (a *Engine) tools() error {
 	cfg := a.cfg
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
-	// fpcalc необязателен: без него fingerprint — предупреждение в job
+	// fpcalc is optional: without it fingerprint is a warning in the job
 	fpcalc := cfg.Tools.Fpcalc
 	if fpcalc != "" {
 		_, err := exec.LookPath(fpcalc)
@@ -119,21 +119,21 @@ func (a *Engine) tools() error {
 		a.log.Warn("engine: no fpcalc, audio fingerprint is off")
 	}
 
-	// аудио
+	// audio
 	a.audio = audiotool.Tools{FFmpeg: cfg.Tools.FFmpeg, FFprobe: cfg.Tools.FFprobe, Fpcalc: fpcalc}
 	err := a.audio.Check()
 	if err != nil {
 		return fmt.Errorf("engine: audio: %w", err)
 	}
 
-	// видео
+	// video
 	a.video = &videotool.Tools{FFmpeg: cfg.Tools.FFmpeg, FFprobe: cfg.Tools.FFprobe, Threads: cfg.Video.Threads}
 	err = a.video.Check(ctx)
 	if err != nil {
 		return fmt.Errorf("engine: video: %w", err)
 	}
 
-	// картинки
+	// images
 	a.images = imagetool.Tools{
 		Vips:       cfg.Tools.Vips,
 		Header:     cfg.Tools.VipsHeader,
@@ -148,7 +148,7 @@ func (a *Engine) tools() error {
 	return nil
 }
 
-// downloaders — загрузчик оригиналов каждого типа со своим лимитом размера
+// downloaders builds a source downloader per type with its own size limit
 func (a *Engine) downloaders() {
 	cfg := a.cfg
 
@@ -160,7 +160,7 @@ func (a *Engine) downloaders() {
 	}
 }
 
-// downloader — загрузчик с лимитом mb MiB
+// downloader builds a downloader limited to mb MiB
 func (a *Engine) downloader(mb int64) *storage.Downloader {
 	return &storage.Downloader{
 		UserAgent:     "bee/1",
@@ -170,7 +170,7 @@ func (a *Engine) downloader(mb int64) *storage.Downloader {
 	}
 }
 
-// Ready — ffmpeg и vips отвечают, хранилище доступно (readiness)
+// Ready reports that ffmpeg and vips respond and storage is reachable (readiness)
 func (a *Engine) Ready(ctx context.Context) error {
 	err := a.video.Version(ctx)
 	if err != nil {
@@ -185,7 +185,7 @@ func (a *Engine) Ready(ctx context.Context) error {
 	return a.storage.Ping(ctx)
 }
 
-// acquire — слот job; ждёт до BEE_QUEUE_WAIT
+// acquire takes a job slot; waits up to BEE_QUEUE_WAIT
 func (a *Engine) acquire(ctx context.Context) *code.Error {
 	select {
 	case a.slots <- struct{}{}:
@@ -193,13 +193,13 @@ func (a *Engine) acquire(ctx context.Context) *code.Error {
 	default:
 	}
 
-	// все слоты заняты, ждать нельзя
+	// all slots are busy, waiting is not allowed
 	busy := code.New(code.InternalTemporaryError, "all job slots are busy", nil)
 	if a.cfg.QueueWait == 0 {
 		return busy
 	}
 
-	// ждём слот
+	// wait for a slot
 	t := time.NewTimer(a.cfg.QueueWait)
 	defer t.Stop()
 
@@ -213,7 +213,7 @@ func (a *Engine) acquire(ctx context.Context) *code.Error {
 	}
 }
 
-// release — освобождает слот законченной job
+// release frees the slot of a finished job
 func (a *Engine) release() {
 	<-a.slots
 }

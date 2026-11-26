@@ -17,11 +17,11 @@ func TestLocal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// local реализует storage.Storage
+	// local implements storage.Storage
 	var st storage.Storage = local
 	ctx := context.Background()
 
-	// ключ чистится
+	// the key is cleaned
 	err = st.Put(ctx, "/a/b/../c.json", strings.NewReader(`{}`), 2, "application/json")
 	if err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestLocal(t *testing.T) {
 		t.Fatal("key must be cleaned:", err)
 	}
 
-	// ключ за пределами папки остаётся внутри
+	// a key outside the folder stays inside
 	err = st.Put(ctx, "../../escape.json", strings.NewReader(`{}`), 2, "application/json")
 	if err != nil {
 		t.Fatal(err)
@@ -43,19 +43,19 @@ func TestLocal(t *testing.T) {
 		t.Fatal("key must stay inside the dir:", err)
 	}
 
-	// объект есть
+	// the object exists
 	ok, err := st.Exists(ctx, "a/c.json")
 	if err != nil || !ok {
 		t.Fatalf("exists %v %v", ok, err)
 	}
 
-	// содержимое
+	// content
 	b, err := os.ReadFile(filepath.Join(dir, "a", "c.json"))
 	if err != nil || string(b) != "{}" {
 		t.Fatalf("content %q %v", b, err)
 	}
 
-	// объекта нет
+	// no object
 	ok, err = st.Exists(ctx, "nope")
 	if err != nil || ok {
 		t.Errorf("missing: %v %v", ok, err)
@@ -66,7 +66,7 @@ func TestLocal(t *testing.T) {
 		t.Error(err)
 	}
 
-	// пустая папка запрещена
+	// an empty folder is not allowed
 	_, err = New("")
 	if err == nil {
 		t.Error("empty dir must be refused")

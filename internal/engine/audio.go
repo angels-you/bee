@@ -20,43 +20,43 @@ import (
 	"github.com/angels-you/bee/pkg/types/code"
 )
 
-// audioRun — состояние одной аудио job
+// audioRun is the state of one audio job
 type audioRun struct {
 	*work
 	job audio.Job
 	res audio.Result
-	hls *encrypt.HLS // шифрование сегментов; nil без ключа
+	hls *encrypt.HLS // segment encryption; nil without a key
 
-	source     string // скачанный оригинал
+	source     string // downloaded source
 	meta       audio.Metadata
 	analysis   audiotool.Analysis
 	gain       float64
-	renditions []audioRendition // в порядке Options.Renditions
-	files      []upload         // init, сегменты и waveform json
+	renditions []audioRendition // in Options.Renditions order
+	files      []upload         // init, segments and waveform json
 }
 
-// audioRendition — один битрейт HLS: файлы ffmpeg и что из них опубликовано
+// audioRendition is one HLS bitrate: ffmpeg files and what was published from them
 type audioRendition struct {
 	kbit     int
-	folder   string // имя папки: битрейт в kbit/s
-	dir      string // локально, как записал ffmpeg
-	key      string // папка в хранилище: <папка master>/<folder>
+	folder   string // folder name: bitrate in kbit/s
+	dir      string // local, as written by ffmpeg
+	key      string // folder in storage: <master folder>/<folder>
 	playlist audiotool.Playlist
 	track    *track
 }
 
-// Audio — одна аудио job: проверка и дефолты → слот → master ещё не
-// опубликован (иначе ALREADY_EXISTS или сохранённый результат этой же
-// job) → скачивание → ffprobe и лимиты → анализ → fingerprint →
-// громкость → HLS всех вариантов → waveform → загрузка волнами, master
-// последним → проверка. Упавшая job возвращает Result с Error и тот же
-// *code.Error как ошибку
+// Audio runs one audio job: check and defaults → slot → master not yet
+// published (else ALREADY_EXISTS or the saved result of this same
+// job) → download → ffprobe and limits → analysis → fingerprint →
+// loudness → HLS of all variants → waveform → upload in waves, master
+// last → verify. A failed job returns a Result with Error and the same
+// *code.Error as the error
 func (a *Engine) Audio(ctx context.Context, j audio.Job) (audio.Result, error) {
 	r := &audioRun{work: a.newWork(proto.Audio, j.ID, j.Input), job: j}
 	r.res.ID = j.ID
 	r.res.Metrics = map[string]int64{}
 
-	// проверка на копии: job вызывающего не меняется
+	// check a copy: the caller's job is not changed
 	r.job.Options.Renditions = slices.Clone(j.Options.Renditions)
 	e := a.checkAudio(&r.job)
 	if e != nil {
@@ -65,7 +65,7 @@ func (a *Engine) Audio(ctx context.Context, j audio.Job) (audio.Result, error) {
 	r.output = r.job.Output
 	r.log = r.log.With("output", r.job.Output)
 
-	// шифрование
+	// encryption
 	if len(r.job.Key) > 0 {
 		hls, err := encrypt.New(r.job.Key)
 		if err != nil {
@@ -74,14 +74,14 @@ func (a *Engine) Audio(ctx context.Context, j audio.Job) (audio.Result, error) {
 		r.hls = hls
 	}
 
-	// слот, таймаут, папка
+	// slot, timeout, folder
 	ctx, end, e := r.begin(ctx, a.cfg.Audio.Timeout)
 	if e != nil {
 		return r.fail(e)
 	}
 	defer end()
 
-	// master уже опубликован: отказ или эта job уже выполнена
+	// master already published: reject, or this job already ran
 	stored, done, e := r.published(ctx)
 	if e != nil {
 		return r.fail(e)
@@ -90,7 +90,7 @@ func (a *Engine) Audio(ctx context.Context, j audio.Job) (audio.Result, error) {
 		return r.again(stored)
 	}
 
-	// работа
+	// work
 	e = r.pipeline(ctx)
 	if e != nil {
 		return r.fail(e)
@@ -99,15 +99,15 @@ func (a *Engine) Audio(ctx context.Context, j audio.Job) (audio.Result, error) {
 	return r.done()
 }
 
-// checkAudio — job без настроек (Validate типа), дефолты пустых
-// параметров из конфига, потом то, что зависит от них: папки вариантов
+// checkAudio checks the job without settings (the type's Validate), fills empty
+// parameters with config defaults, then what depends on them: variant folders
 func (a *Engine) checkAudio(j *audio.Job) *code.Error {
 	e := j.Validate()
 	if e != nil {
 		return e
 	}
 
-	// дефолты bee
+	// bee defaults
 	cfg := a.cfg.Audio
 	o := &j.Options
 	if o.LUFS == 0 {
@@ -143,7 +143,7 @@ func (a *Engine) checkAudio(j *audio.Job) *code.Error {
 		o.Fingerprint = &fingerprint
 	}
 
-	// папка каждого варианта рядом с master принадлежит HLS
+	// each variant folder next to master belongs to HLS
 	others := map[string]string{"wave": j.Wave, "meta": j.Meta, "analysis": j.Analysis}
 	for _, kbit := range o.Renditions {
 		folder := path.Join(path.Dir(j.Output), strconv.Itoa(kbit)) + "/"
@@ -158,7 +158,7 @@ func (a *Engine) checkAudio(j *audio.Job) *code.Error {
 	return nil
 }
 
-// pipeline — этапы по порядку, время каждого в Result.Metrics
+// pipeline runs the stages in order, timing each in Result.Metrics
 func (a *audioRun) pipeline(ctx context.Context) *code.Error {
 	e := a.stage(ctx, "download", a.download)
 	if e != nil {
@@ -203,7 +203,7 @@ func (a *audioRun) pipeline(ctx context.Context) *code.Error {
 	return a.stage(ctx, "verify", a.verify)
 }
 
-// stage — один этап; его время в Result.Metrics под name
+// stage runs one stage; its time goes to Result.Metrics under name
 func (a *audioRun) stage(ctx context.Context, name string, fn func(context.Context) *code.Error) *code.Error {
 	if ctx.Err() != nil {
 		return code.As(ctx.Err())
@@ -224,12 +224,12 @@ func (a *audioRun) stage(ctx context.Context, name string, fn func(context.Conte
 	return nil
 }
 
-// warn — некритичное замечание о качестве
+// warn adds a non-critical quality note
 func (a *audioRun) warn(c, message string) {
 	a.res.Warnings = append(a.res.Warnings, audio.Warning{Code: c, Message: message})
 }
 
-// failed — ошибка инструмента: закончившийся контекст как есть, иначе код c
+// failed maps a tool error: an ended context as is, otherwise code c
 func (a *audioRun) failed(ctx context.Context, c code.Code, message string, err error) *code.Error {
 	if ctx.Err() != nil {
 		return code.As(ctx.Err())
@@ -238,7 +238,7 @@ func (a *audioRun) failed(ctx context.Context, c code.Code, message string, err 
 	return code.New(c, message+": "+a.short(err), err)
 }
 
-// download — оригинал в <dir>/source
+// download fetches the source to <dir>/source
 func (a *audioRun) download(ctx context.Context) *code.Error {
 	file, info, e := a.fetch(ctx, "input", a.job.Input, "source")
 	if e != nil {
@@ -251,7 +251,7 @@ func (a *audioRun) download(ctx context.Context) *code.Error {
 	return nil
 }
 
-// probe — ffprobe, формат и лимиты
+// probe runs ffprobe, checks the format and limits
 func (a *audioRun) probe(ctx context.Context) *code.Error {
 	cfg := a.engine.cfg.Audio
 	tools := a.engine.audio
@@ -267,7 +267,7 @@ func (a *audioRun) probe(ctx context.Context) *code.Error {
 		m.Size = a.res.SourceSize
 	}
 
-	// формат и длительность
+	// format and duration
 	dur := time.Duration(m.DurationMs) * time.Millisecond
 	switch {
 	case !tools.Supported(&m):
@@ -281,7 +281,7 @@ func (a *audioRun) probe(ctx context.Context) *code.Error {
 	a.meta = m
 	a.res.Meta = &a.meta
 
-	// замечания о качестве оригинала
+	// quality notes about the source
 	lossy := false
 	switch m.Codec {
 	case "mp3", "aac", "vorbis", "opus":
@@ -299,7 +299,7 @@ func (a *audioRun) probe(ctx context.Context) *code.Error {
 	return nil
 }
 
-// analyze — один проход декодирования: громкость, качество, pcm для waveform
+// analyze makes one decode pass: loudness, quality, pcm for the waveform
 func (a *audioRun) analyze(ctx context.Context) *code.Error {
 	t := time.Now()
 	defer a.took(&a.processMs, t)
@@ -315,14 +315,14 @@ func (a *audioRun) analyze(ctx context.Context) *code.Error {
 		o.PCMPath = filepath.Join(a.dir, "pcm.raw")
 	}
 
-	// анализ
+	// analysis
 	res, err := a.engine.audio.Analyze(ctx, a.source, o)
 	if err != nil {
 		return a.failed(ctx, code.InvalidAudio, "audio analysis failed", err)
 	}
 
-	// ни одного сэмпла выше пола: цифровая тишина на весь трек или нет
-	// сэмплов вовсе — нечего кодировать и публиковать
+	// no sample above the floor: digital silence for the whole track, or no
+	// samples at all: nothing to encode and publish
 	if res.Loudness.SamplePeak <= audiotool.LevelFloor {
 		return code.New(code.InvalidAudio, "track is silent", nil)
 	}
@@ -330,7 +330,7 @@ func (a *audioRun) analyze(ctx context.Context) *code.Error {
 	a.analysis = res
 	a.res.Loudness = &a.analysis.Loudness
 
-	// громкость
+	// loudness
 	l := res.Loudness
 	switch {
 	case l.Integrated < -60:
@@ -343,13 +343,13 @@ func (a *audioRun) analyze(ctx context.Context) *code.Error {
 		return nil
 	}
 
-	// качество
+	// quality
 	a.res.Quality = &a.analysis.Quality
 	a.qualityWarnings(o.DurationSec)
 	return nil
 }
 
-// qualityWarnings — замечания по диагностике качества
+// qualityWarnings builds notes from the quality diagnostics
 func (a *audioRun) qualityWarnings(duration float64) {
 	q := a.analysis.Quality
 
@@ -365,7 +365,7 @@ func (a *audioRun) qualityWarnings(duration float64) {
 		a.warn("trailing_silence", fmt.Sprintf("%.1fs of silence at the end", q.TrailingSilence))
 	}
 
-	// длинная тишина внутри трека
+	// long silence inside the track
 	for _, s := range q.Silences {
 		switch {
 		case s.Start <= 0.05:
@@ -386,7 +386,7 @@ func (a *audioRun) qualityWarnings(duration float64) {
 	}
 }
 
-// fingerprint — chromaprint по желанию; ошибка — только замечание
+// fingerprint computes chromaprint on request; an error is only a note
 func (a *audioRun) fingerprint(ctx context.Context) *code.Error {
 	if !*a.job.Options.Fingerprint {
 		return nil
@@ -406,7 +406,7 @@ func (a *audioRun) fingerprint(ctx context.Context) *code.Error {
 	return nil
 }
 
-// normalize — только линейное усиление
+// normalize applies linear gain only
 func (a *audioRun) normalize(ctx context.Context) *code.Error {
 	o := a.job.Options
 	if !o.Normalize {
@@ -425,8 +425,8 @@ func (a *audioRun) normalize(ctx context.Context) *code.Error {
 	return nil
 }
 
-// encode — все варианты одним запуском ffmpeg, потом media playlist
-// каждого проверены и выровнены, и громкость результата
+// encode encodes all variants in one ffmpeg run, then checks and aligns the media
+// playlist of each, and measures the result loudness
 func (a *audioRun) encode(ctx context.Context) *code.Error {
 	t := time.Now()
 	defer a.processing(t)
@@ -435,7 +435,7 @@ func (a *audioRun) encode(ctx context.Context) *code.Error {
 	tools := a.engine.audio
 	dir := filepath.Join(a.dir, "hls")
 
-	// кодирование
+	// encoding
 	err := tools.EncodeHLS(ctx, a.source, dir, audiotool.EncodeOptions{
 		GainDB:         a.gain,
 		Bitrates:       o.Renditions,
@@ -447,8 +447,8 @@ func (a *audioRun) encode(ctx context.Context) *code.Error {
 		return a.failed(ctx, code.EncodeFailed, "encoding failed", err)
 	}
 
-	// плеер переключает варианты на границах сегментов: каждый вариант
-	// должен быть порезан ровно как первый
+	// the player switches variants at segment boundaries: each variant
+	// must be cut exactly like the first
 	for _, kbit := range o.Renditions {
 		e := a.rendition(ctx, dir, kbit)
 		if e != nil {
@@ -456,10 +456,10 @@ func (a *audioRun) encode(ctx context.Context) *code.Error {
 		}
 	}
 
-	// громкость результата
+	// result loudness
 	a.measure(ctx)
 
-	// init и сегменты каждого варианта
+	// init and segments of each variant
 	for i := range a.renditions {
 		r := &a.renditions[i]
 		a.files = append(a.files, upload{key: path.Join(r.key, r.playlist.Init), file: filepath.Join(r.dir, r.playlist.Init), track: r.track})
@@ -472,7 +472,7 @@ func (a *audioRun) encode(ctx context.Context) *code.Error {
 	return nil
 }
 
-// rendition — media playlist варианта kbit проверен и совпадает с первым
+// rendition checks that the media playlist of variant kbit matches the first
 func (a *audioRun) rendition(ctx context.Context, dir string, kbit int) *code.Error {
 	folder := strconv.Itoa(kbit)
 
@@ -496,8 +496,8 @@ func (a *audioRun) rendition(ctx context.Context, dir string, kbit int) *code.Er
 	return nil
 }
 
-// measure — громкость того, что слушатель услышит первым: первый вариант,
-// с него начинает плеер; остальные — тот же сигнал в другом битрейте
+// measure takes the loudness of what the listener hears first: the first variant,
+// the player starts with it; the rest are the same signal at another bitrate
 func (a *audioRun) measure(ctx context.Context) {
 	first := filepath.Join(a.renditions[0].dir, audiotool.PlaylistName)
 
@@ -517,7 +517,7 @@ func (a *audioRun) measure(ctx context.Context) {
 	}
 }
 
-// waveform — json в Job.Wave и Result.Waveform (его пики) из pcm анализа
+// waveform writes json to Job.Wave and Result.Waveform (its peaks) from the analysis pcm
 func (a *audioRun) waveform(ctx context.Context) *code.Error {
 	if a.job.Wave == "" {
 		return nil
@@ -526,7 +526,7 @@ func (a *audioRun) waveform(ctx context.Context) *code.Error {
 	o := a.job.Options
 	pcm := filepath.Join(a.dir, "pcm.raw")
 
-	// pcm прохода анализа
+	// pcm from the analysis pass
 	f, err := os.Open(pcm)
 	if err != nil {
 		return code.New(code.InternalTemporaryError, "pcm missing", err)
@@ -539,7 +539,7 @@ func (a *audioRun) waveform(ctx context.Context) *code.Error {
 		return code.New(code.InvalidAudio, "waveform: "+a.short(err), err)
 	}
 
-	// json и пики
+	// json and peaks
 	js, err := json.Marshal(w)
 	if err != nil {
 		return code.New(code.InternalTemporaryError, "waveform json", err)
@@ -550,28 +550,28 @@ func (a *audioRun) waveform(ctx context.Context) *code.Error {
 	return nil
 }
 
-// upload — волнами, master последним: init, сегменты и waveform json;
-// json метаданных и анализа (метаданные перечисляют варианты, измеренные
-// по опубликованным сегментам); media playlist; результат в журнал;
-// master. Опубликованный master — полный набор: при любой ошибке он не
-// публикуется. С ключом сегменты шифруются, а media playlist получают
-// строки ключа; в master ключа нет
+// upload publishes in waves, master last: init, segments and waveform json;
+// metadata and analysis json (metadata lists the variants, measured
+// from the published segments); media playlists; result to the ledger;
+// master. A published master is a complete set: on any error it is not
+// published. With a key, segments are encrypted and media playlists get
+// key lines; master has no key
 func (a *audioRun) upload(ctx context.Context) *code.Error {
 	a.res.Encrypted = a.hls != nil
 
-	// волна 1: файлы
+	// wave 1: files
 	e := a.putAll(ctx, a.files)
 	if e != nil {
 		return e
 	}
 
-	// media playlist и варианты результата
+	// media playlists and result variants
 	lists, variants, e := a.playlists()
 	if e != nil {
 		return e
 	}
 
-	// волна 2: json
+	// wave 2: json
 	side, e := a.sideFiles()
 	if e != nil {
 		return e
@@ -582,13 +582,13 @@ func (a *audioRun) upload(ctx context.Context) *code.Error {
 		return e
 	}
 
-	// волна 3: media playlist
+	// wave 3: media playlists
 	e = a.putAll(ctx, lists)
 	if e != nil {
 		return e
 	}
 
-	// результат в журнал до master
+	// result to the ledger before master
 	a.res.Size = a.uploaded
 	a.res.Elapsed = a.elapsed()
 	e = a.remember(ctx, a.res)
@@ -596,7 +596,7 @@ func (a *audioRun) upload(ctx context.Context) *code.Error {
 		return e
 	}
 
-	// master последним: кто видит его, видит полный набор
+	// master last: whoever sees it sees the complete set
 	master := upload{key: a.job.Output, data: []byte(audiotool.Master(variants))}
 	e = a.putAll(ctx, []upload{master})
 	if e != nil {
@@ -607,8 +607,8 @@ func (a *audioRun) upload(ctx context.Context) *code.Error {
 	return nil
 }
 
-// playlists — media playlist каждого варианта как публикуется (с ключами)
-// и варианты master и результата
+// playlists builds each variant media playlist as published (with keys)
+// and the variants of master and of the result
 func (a *audioRun) playlists() ([]upload, []audiotool.Variant, *code.Error) {
 	lists := make([]upload, 0, len(a.renditions))
 	variants := make([]audiotool.Variant, 0, len(a.renditions))
@@ -616,13 +616,13 @@ func (a *audioRun) playlists() ([]upload, []audiotool.Variant, *code.Error) {
 	for i := range a.renditions {
 		r := &a.renditions[i]
 
-		// текст ffmpeg
+		// ffmpeg text
 		text, err := os.ReadFile(filepath.Join(r.dir, audiotool.PlaylistName))
 		if err != nil {
 			return nil, nil, code.New(code.InternalTemporaryError, "playlist missing", err)
 		}
 
-		// строки ключа
+		// key lines
 		if a.hls != nil {
 			published, err := a.hls.Playlist(string(text), a.job.KeyURI, r.track.ivs)
 			if err != nil {
@@ -631,7 +631,7 @@ func (a *audioRun) playlists() ([]upload, []audiotool.Variant, *code.Error) {
 			text = []byte(published)
 		}
 
-		// измерено по опубликованному
+		// measured from what was published
 		peak, average := r.playlist.Bandwidth(r.track.sizes)
 		size := int64(len(text))
 		for _, n := range r.track.sizes {
@@ -656,11 +656,11 @@ func (a *audioRun) playlists() ([]upload, []audiotool.Variant, *code.Error) {
 	return lists, variants, nil
 }
 
-// sideFiles — json метаданных и анализа, если job их просит
+// sideFiles builds the metadata and analysis json, if the job asks for them
 func (a *audioRun) sideFiles() ([]upload, *code.Error) {
 	var side []upload
 
-	// метаданные
+	// metadata
 	if a.job.Meta != "" {
 		meta := struct {
 			SHA256     string            `json:"sha256"`
@@ -675,7 +675,7 @@ func (a *audioRun) sideFiles() ([]upload, *code.Error) {
 		side = append(side, upload{key: a.job.Meta, data: data})
 	}
 
-	// анализ: только то, что безопасно публиковать
+	// analysis: only what is safe to publish
 	if a.job.Analysis != "" {
 		analysis := struct {
 			Loudness *audio.Loudness `json:"loudness,omitempty"`
@@ -693,9 +693,9 @@ func (a *audioRun) sideFiles() ([]upload, *code.Error) {
 	return side, nil
 }
 
-// verify — нужные объекты действительно на месте: master, у каждого
-// варианта media playlist, init, первый и последний сегмент, и каждый
-// json, который просила job
+// verify checks that the needed objects are really there: master, for each
+// variant the media playlist, init, first and last segment, and every
+// json the job asked for
 func (a *audioRun) verify(ctx context.Context) *code.Error {
 	required := []string{a.job.Output}
 
@@ -718,7 +718,7 @@ func (a *audioRun) verify(ctx context.Context) *code.Error {
 	return a.stored(ctx, required)
 }
 
-// short — одна строка ошибки для сообщений, не длиннее 300 байт
+// short trims an error to one line for messages, at most 300 bytes
 func (a *audioRun) short(err error) string {
 	s, _, _ := strings.Cut(err.Error(), "\n")
 	if len(s) > 300 {
@@ -728,7 +728,7 @@ func (a *audioRun) short(err error) string {
 	return s
 }
 
-// done — успешный результат
+// done returns a successful result
 func (a *audioRun) done() (audio.Result, error) {
 	a.res.Elapsed = a.elapsed()
 	a.res.Metrics["total"] = a.res.Elapsed
@@ -737,7 +737,7 @@ func (a *audioRun) done() (audio.Result, error) {
 	return a.res, nil
 }
 
-// again — сохранённый результат job, уже выполненной раньше
+// again returns the saved result of a job that already ran
 func (a *audioRun) again(stored []byte) (audio.Result, error) {
 	var res audio.Result
 	err := json.Unmarshal(stored, &res)
@@ -749,7 +749,7 @@ func (a *audioRun) again(stored []byte) (audio.Result, error) {
 	return res, nil
 }
 
-// fail — упавший результат: id, ошибка и что известно об оригинале
+// fail returns a failed result: id, error and what is known about the source
 func (a *audioRun) fail(e *code.Error) (audio.Result, error) {
 	a.res.Error = e
 	a.res.Elapsed = a.elapsed()

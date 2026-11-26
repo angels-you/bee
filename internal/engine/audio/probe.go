@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// Metadata — данные и теги оригинала: публичный тип job
+// Metadata is the source data and tags: public job type
 type Metadata = types.Metadata
 
 // ffprobe -print_format json

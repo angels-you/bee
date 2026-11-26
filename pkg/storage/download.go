@@ -18,85 +18,85 @@ import (
 	"github.com/angels-you/bee/pkg/types/code"
 )
 
-// Downloader — скачивает url оригинала в локальный файл с защитой от SSRF:
-// только https, каждый хоп резолвится и проверяется на приватные
-// адреса, не больше 3 редиректов, жёсткий лимит размера. Всё скачивание
-// ограничено контекстом вызывающего. Каждая ошибка — *code.Error, и ни
-// одна не содержит query url (подпись presigned). Безопасен для
-// одновременного использования
+// Downloader downloads an original url into a local file with SSRF protection:
+// https only, every hop is resolved and checked for private
+// addresses, at most 3 redirects, a hard size limit. The whole download
+// is bound by the caller's context. Every error is a *code.Error, and none
+// contains the url query (presigned signature). Safe for
+// concurrent use
 type Downloader struct {
-	UserAgent     string                 // User-Agent каждого запроса: bee/1
-	MaxSize       int64                  // байт, 0 — без лимита
-	AllowInsecure bool                   // http и приватные адреса: только тесты
-	HostAllowed   func(host string) bool // nil — любой публичный хост
+	UserAgent     string                 // User-Agent of every request: bee/1
+	MaxSize       int64                  // bytes, 0 means no limit
+	AllowInsecure bool                   // http and private addresses: tests only
+	HostAllowed   func(host string) bool // nil means any public host
 
 	once   sync.Once
 	client *http.Client
 }
 
-// Info — скачанный файл
+// Info describes a downloaded file
 type Info struct {
 	Size        int64  `json:"size"`
 	SHA256      string `json:"sha256"`
 	ContentType string `json:"content_type,omitempty"`
 }
 
-// Download — тело url в файл dst, его размер и sha256. Неудачная загрузка
-// файл за собой не оставляет
+// Download writes the url body into file dst and returns its size and sha256. A failed download
+// leaves no file behind
 func (a *Downloader) Download(ctx context.Context, rawURL, dst string) (info Info, err error) {
 
-	// разбираем url
+	// parse the url
 	u, perr := url.Parse(rawURL)
 	if perr != nil {
 		return info, code.New(code.InvalidJob, "source url is not valid", nil)
 	}
 
-	// схема и хост
+	// scheme and host
 	err = a.checkURL(u)
 	if err != nil {
 		return
 	}
 
-	// запрос
+	// request
 	req, rerr := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if rerr != nil {
 		return info, code.New(code.InvalidJob, "source url is not valid", a.redact(rerr))
 	}
 	req.Header.Set("User-Agent", a.UserAgent)
 
-	// ответ
+	// response
 	resp, rerr := a.httpClient().Do(req)
 	if rerr != nil {
 		return info, a.failed(ctx, rerr)
 	}
 	defer resp.Body.Close()
 
-	// статус ответа
+	// response status
 	err = a.status(resp)
 	if err != nil {
 		return
 	}
 
-	// размер известен заранее
+	// size known in advance
 	if a.MaxSize > 0 && resp.ContentLength > a.MaxSize {
 		return info, a.tooLarge()
 	}
 	info.ContentType = resp.Header.Get("Content-Type")
 
-	// файл
+	// file
 	f, ferr := os.Create(dst)
 	if ferr != nil {
 		return info, code.New(code.InternalTemporaryError, "cannot create the source file", ferr)
 	}
 	defer a.discard(f, dst, &err)
 
-	// тело с лимитом
+	// body with a limit
 	var body io.Reader = resp.Body
 	if a.MaxSize > 0 {
 		body = io.LimitReader(resp.Body, a.MaxSize+1)
 	}
 
-	// копируем и сразу считаем sha256
+	// copy and compute sha256 on the fly
 	h := sha256.New()
 	n, cerr := io.Copy(io.MultiWriter(f, h), body)
 	if cerr != nil {
@@ -115,14 +115,14 @@ func (a *Downloader) Download(ctx context.Context, rawURL, dst string) (info Inf
 	return info, nil
 }
 
-// httpClient — единственный клиент загрузчика, создаётся при первом вызове
+// httpClient returns the single downloader client, created on first call
 func (a *Downloader) httpClient() *http.Client {
 	a.once.Do(a.build)
 	return a.client
 }
 
-// build — клиент: без прокси, каждое соединение через dial, каждый
-// редирект через redirect
+// build returns the client: no proxy, every connection through dial, every
+// redirect through redirect
 func (a *Downloader) build() {
 	transport := &http.Transport{
 		Proxy:               nil,
@@ -137,21 +137,21 @@ func (a *Downloader) build() {
 	}
 }
 
-// dial — соединение с первым публичным адресом хоста; приватный
-// отклоняется, если не AllowInsecure
+// dial connects to the first public address of the host; a private one
+// is rejected unless AllowInsecure
 func (a *Downloader) dial(ctx context.Context, network, addr string) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, err
 	}
 
-	// все адреса хоста
+	// all host addresses
 	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
 	if err != nil {
 		return nil, err
 	}
 
-	// первый, к которому можно и удалось подключиться
+	// the first one that is allowed and reachable
 	dialer := &net.Dialer{Timeout: 15 * time.Second}
 	var last error
 	for _, ip := range ips {
@@ -173,7 +173,7 @@ func (a *Downloader) dial(ctx context.Context, network, addr string) (net.Conn, 
 	return nil, last
 }
 
-// redirect — не больше 3 хопов, каждый по правилам первого url
+// redirect allows at most 3 hops, each by the rules of the first url
 func (a *Downloader) redirect(req *http.Request, via []*http.Request) error {
 	if len(via) >= 3 {
 		return errors.New("download: too many redirects")
@@ -182,8 +182,8 @@ func (a *Downloader) redirect(req *http.Request, via []*http.Request) error {
 	return a.checkURL(req.URL)
 }
 
-// checkURL — правила схемы и хоста для первого запроса и каждого
-// редиректа
+// checkURL applies the scheme and host rules to the first request and every
+// redirect
 func (a *Downloader) checkURL(u *url.URL) error {
 	insecureHTTP := a.AllowInsecure && u.Scheme == "http"
 	ip := net.ParseIP(u.Hostname())
@@ -202,15 +202,15 @@ func (a *Downloader) checkURL(u *url.URL) error {
 	return nil
 }
 
-// status — код ответа: 200 или ошибка с понятным кодом
+// status maps the response code: 200 or an error with a clear code
 func (a *Downloader) status(resp *http.Response) error {
 	switch resp.StatusCode {
 	case http.StatusOK:
 		return nil
 	case http.StatusForbidden, http.StatusBadRequest:
 
-		// s3 отвечает 403 AccessDenied / 400 с "Request has expired" или
-		// "X-Amz-Expires ... expired" на истёкшую подпись
+		// s3 answers 403 AccessDenied / 400 with "Request has expired" or
+		// "X-Amz-Expires ... expired" on an expired signature
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		if strings.Contains(strings.ToLower(string(body)), "expire") {
 			return code.New(code.SourceUrlExpired, "source url expired", nil)
@@ -222,12 +222,12 @@ func (a *Downloader) status(resp *http.Response) error {
 	return code.New(code.SourceUnavailable, fmt.Sprintf("source download: http %d", resp.StatusCode), nil)
 }
 
-// failed — ошибка запроса или чтения тела: конец контекста, отказ
-// checkURL на редиректе или сетевой сбой; url в ошибке без query
+// failed maps a request or body read error: context end, checkURL
+// rejection on a redirect, or a network failure; the url in the error has no query
 func (a *Downloader) failed(ctx context.Context, err error) error {
 	err = a.redact(err)
 
-	// контекст загрузки закончился
+	// the download context ended
 	switch {
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
 		return code.New(code.DownloadTimeout, "source download timed out", err)
@@ -235,7 +235,7 @@ func (a *Downloader) failed(ctx context.Context, err error) error {
 		return code.As(ctx.Err())
 	}
 
-	// отказ checkURL или dial внутри http клиента
+	// checkURL or dial rejection inside the http client
 	var typed *code.Error
 	if errors.As(err, &typed) {
 		return code.New(typed.Code, typed.Message, err)
@@ -244,20 +244,20 @@ func (a *Downloader) failed(ctx context.Context, err error) error {
 	return code.New(code.SourceUnavailable, "source download failed", err)
 }
 
-// tooLarge — оригинал больше MaxSize
+// tooLarge means the original is larger than MaxSize
 func (a *Downloader) tooLarge() error {
 	return code.New(code.SourceTooLarge, fmt.Sprintf("source is bigger than %d bytes", a.MaxSize), nil)
 }
 
-// redact — ошибка http клиента (*url.Error) с url, обрезанным до схемы,
-// хоста и пути: в query лежит подпись presigned
+// redact returns the http client error (*url.Error) with the url cut to scheme,
+// host and path: the query holds the presigned signature
 func (a *Downloader) redact(err error) error {
 	var ue *url.Error
 	if !errors.As(err, &ue) {
 		return err
 	}
 
-	// url не разбирается — режем всё после "?"
+	// the url does not parse: cut everything after "?"
 	u, perr := url.Parse(ue.URL)
 	if perr != nil {
 		ue.URL, _, _ = strings.Cut(ue.URL, "?")
@@ -274,8 +274,8 @@ func (a *Downloader) redact(err error) error {
 	return err
 }
 
-// discard — закрывает скачанный файл и удаляет его, если загрузка не
-// удалась (*err задан)
+// discard closes the downloaded file and removes it if the download
+// failed (*err is set)
 func (a *Downloader) discard(f *os.File, name string, err *error) {
 	f.Close()
 
@@ -284,7 +284,7 @@ func (a *Downloader) discard(f *os.File, name string, err *error) {
 	}
 }
 
-// publicIP — не loopback, не приватный, не link-local, не multicast и не
+// publicIP reports whether ip is not loopback, private, link-local, multicast or
 // unspecified
 func (a *Downloader) publicIP(ip net.IP) bool {
 	switch {
@@ -298,7 +298,7 @@ func (a *Downloader) publicIP(ip net.IP) bool {
 		return false
 	}
 
-	// carrier-grade nat 100.64.0.0/10, 0.0.0.0/8 и 169.254.0.0/16
+	// carrier-grade nat 100.64.0.0/10, 0.0.0.0/8 and 169.254.0.0/16
 	v4 := ip.To4()
 	if v4 == nil {
 		return true

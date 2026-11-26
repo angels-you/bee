@@ -2,7 +2,7 @@ package tools
 
 import "testing"
 
-// TestCleanKey — ключ хранилища приводится к нормальному виду
+// TestCleanKey checks that a storage key is normalized
 func TestCleanKey(t *testing.T) {
 	cases := map[string]string{
 		"/a/b/../c.json": "a/c.json",
@@ -21,7 +21,7 @@ func TestCleanKey(t *testing.T) {
 	}
 }
 
-// TestKey — ключ из job: один "/" срезается, грязный ключ отказ
+// TestKey checks a job key: one "/" is stripped, a dirty key is rejected
 func TestKey(t *testing.T) {
 	good := map[string]string{
 		"a/b.m3u8":  "a/b.m3u8",
@@ -45,7 +45,7 @@ func TestKey(t *testing.T) {
 	}
 }
 
-// TestURL — url с хостом принимается, без хоста нет
+// TestURL checks that a url with a host is accepted, without a host it is not
 func TestURL(t *testing.T) {
 	_, ok := URL("https://example.com/a.wav?sig=1")
 	if !ok {
@@ -60,7 +60,7 @@ func TestURL(t *testing.T) {
 	}
 }
 
-// TestSafeURL — в логах нет подписи, userinfo и fragment
+// TestSafeURL checks that logs have no signature, userinfo or fragment
 func TestSafeURL(t *testing.T) {
 	got := SafeURL("https://user:pass@example.com/a.wav?X-Amz-Signature=SECRET#frag")
 	if got != "https://example.com/a.wav" {

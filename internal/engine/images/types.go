@@ -4,7 +4,7 @@ import (
 	types "github.com/angels-you/bee/pkg/types/images"
 )
 
-// типы job картинок: публичные, из pkg/types/images
+// image job types: public, from pkg/types/images
 type (
 	Profile  = types.Profile
 	Format   = types.Format
@@ -13,7 +13,7 @@ type (
 	Geometry = types.Geometry
 )
 
-// форматы и вписывания job: публичные, из pkg/types/images
+// job formats and fits: public, from pkg/types/images
 const (
 	Avif = types.Avif
 	Webp = types.Webp
@@ -30,19 +30,19 @@ const (
 	Fill    = types.Fill
 )
 
-// blurSigma — гауссова сигма Blur 1 (100 %) как доля длинной стороны:
-// 3 %, 61 px при 2048, 10 px при 320. Формы расплываются в цветные пятна
+// blurSigma is the Gaussian sigma of Blur 1 (100 %) as a share of the long side:
+// 3 %, 61 px at 2048, 10 px at 320. Shapes blur into color patches
 func (a Tools) blurSigma() float64 {
 	return 0.03
 }
 
-// sharpenSigma — радиус деталей, которые усиливает Sharpness, как доля
-// длинной стороны: 0.1 %, 2 px при 2048, но не меньше sharpenMinSigma
+// sharpenSigma is the radius of details Sharpness boosts, as a share of the
+// long side: 0.1 %, 2 px at 2048, but no less than sharpenMinSigma
 func (a Tools) sharpenSigma() float64 {
 	return 0.001
 }
 
-// sharpenMinSigma — пиксель: мельче деталей не бывает
+// sharpenMinSigma is one pixel: no detail is finer
 func (a Tools) sharpenMinSigma() float64 {
 	return 0.5
 }

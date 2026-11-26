@@ -5,22 +5,22 @@ import (
 	"time"
 )
 
-// Images — лимиты картинок и дефолты для пустых полей images.Profile
+// Images holds image limits and defaults for empty images.Profile fields
 type Images struct {
 
-	// лимиты сервера: job их не меняет
-	Timeout       time.Duration `env:"TIMEOUT"`        // одна job, от скачивания до загрузки
-	MaxSourceMB   int64         `env:"MAX_SOURCE_MB"`  // самый большой оригинал, MiB
-	MaxMegapixels int           `env:"MAX_MEGAPIXELS"` // ширина × высота оригинала, миллионов
-	MaxDimension  int           `env:"MAX_DIMENSION"`  // самая длинная сторона результата (и коробки задачи), px
-	Threads       int           `env:"THREADS"`        // потоков одного запуска vips
+	// server limits: a job cannot change them
+	Timeout       time.Duration `env:"TIMEOUT"`        // one job, from download to upload
+	MaxSourceMB   int64         `env:"MAX_SOURCE_MB"`  // largest original, MiB
+	MaxMegapixels int           `env:"MAX_MEGAPIXELS"` // original width × height, millions
+	MaxDimension  int           `env:"MAX_DIMENSION"`  // longest side of the result (and of the task box), px
+	Threads       int           `env:"THREADS"`        // threads of one vips run
 
-	// дефолты обработки: пустое поле job = это значение
-	MinQuality int `env:"MIN_QUALITY"` // max_bytes не опускает качество ниже, 1..100
-	AvifEffort int `env:"AVIF_EFFORT"` // усилие кодера avif, 0..9: выше — медленнее и меньше
+	// processing defaults: an empty job field = this value
+	MinQuality int `env:"MIN_QUALITY"` // max_bytes does not lower quality below this, 1..100
+	AvifEffort int `env:"AVIF_EFFORT"` // avif encoder effort, 0..9: higher is slower and smaller
 }
 
-// defaults — проверенные в работе значения
+// defaults are values proven in production
 func (a *Images) defaults() {
 	a.Timeout = 2 * time.Minute
 	a.MaxSourceMB = 50
@@ -32,10 +32,10 @@ func (a *Images) defaults() {
 	a.AvifEffort = 4
 }
 
-// validate — все поля в своих пределах
+// validate checks that all fields are within their limits
 func (a *Images) validate(download time.Duration) (errs []error) {
 
-	// лимиты
+	// limits
 	if a.Timeout <= 0 {
 		errs = append(errs, errors.New("config: BEE_IMAGES_TIMEOUT must be positive"))
 	}
@@ -60,7 +60,7 @@ func (a *Images) validate(download time.Duration) (errs []error) {
 		errs = append(errs, errors.New("config: BEE_IMAGES_THREADS must be at least 1"))
 	}
 
-	// дефолты обработки
+	// processing defaults
 	if !(a.MinQuality >= 1 && a.MinQuality <= 100) {
 		errs = append(errs, errors.New("config: BEE_IMAGES_MIN_QUALITY must be within 1..100"))
 	}

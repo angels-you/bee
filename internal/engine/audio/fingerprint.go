@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// Fingerprint — chromaprint: публичный тип job
+// Fingerprint is chromaprint: public job type
 type Fingerprint = types.Fingerprint
 
 // Fingerprint runs fpcalc on the first maxSeconds (0 = fpcalc default 120).

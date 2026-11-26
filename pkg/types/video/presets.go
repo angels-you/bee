@@ -100,7 +100,7 @@ func profiles(qualities ...Quality) []Profile {
 // Returns 0 when no valid target bitrate/duration is available, including CRF
 // profiles without an explicit estimate. Does not include HLS/MP4 overhead.
 func (p Profile) EstimatedBytes(duration float64, withAudio bool) int64 {
-	// без длительности или битрейта оценки нет
+	// no estimate without duration or bitrate
 	switch {
 	case duration <= 0:
 		return 0

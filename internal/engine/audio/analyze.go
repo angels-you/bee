@@ -29,13 +29,13 @@ const (
 	LoudnessFloor = -70.0
 )
 
-// Loudness — EBU R128: публичный тип job
+// Loudness is EBU R128: public job type
 type Loudness = types.Loudness
 
-// Silence — отрезок тишины: публичный тип job
+// Silence is a span of silence: public job type
 type Silence = types.Silence
 
-// Quality — диагностика качества: публичный тип job
+// Quality is the quality diagnostics: public job type
 type Quality = types.Quality
 
 // AnalyzeOptions — what to measure in one decode pass.

@@ -16,19 +16,19 @@ import (
 	"github.com/angels-you/bee/pkg/types/video"
 )
 
-// videoRun — состояние одной видео job (Stream или Video)
+// videoRun is the state of one video job (Stream or Video)
 type videoRun struct {
 	*work
 
-	// job, уже проверенная
+	// the job, already checked
 	options    video.Options
 	profiles   []video.Profile
-	hls        *video.HLS // nil у Video
+	hls        *video.HLS // nil for Video
 	thumbnails []video.Thumbnail
 	preview    *video.Preview
-	cipher     *encrypt.HLS // шифрование сегментов; nil без ключа
+	cipher     *encrypt.HLS // segment encryption; nil without a key
 
-	// работа
+	// work
 	source *videotool.File
 	sound  *videotool.File
 	mark   *videotool.File
@@ -36,28 +36,28 @@ type videoRun struct {
 	report *videotool.Report
 	res    video.Result
 
-	// публикация
+	// publishing
 	renditions []*videoRendition
-	entry      upload // вход: master, единственный media playlist или mp4
+	entry      upload // entry: master, the only media playlist, or mp4
 }
 
-// videoRendition — один вариант HLS как публикуется: куда идут его файлы,
-// его playlist, размеры и IV опубликованных файлов
+// videoRendition is one HLS variant as published: where its files go,
+// its playlist, sizes and IVs of the published files
 type videoRendition struct {
 	profile  video.Profile
 	output   videotool.Output
-	dir      string // локальная папка
-	folder   string // папка init и сегментов в хранилище
-	playlist string // ключ его media playlist
-	text     []byte // media playlist как опубликован (с ключами)
+	dir      string // local folder
+	folder   string // init and segments folder in storage
+	playlist string // key of its media playlist
+	text     []byte // media playlist as published (with keys)
 	track    *track
 }
 
-// Stream — одна HLS job (см. process)
+// Stream runs one HLS job (see process)
 func (a *Engine) Stream(ctx context.Context, j video.Stream) (video.Result, error) {
 	r := &videoRun{work: a.newWork(proto.Stream, j.ID, j.Input)}
 
-	// проверка на копии: job вызывающего не меняется
+	// check a copy: the caller's job is not changed
 	check := videoCheck{cfg: a.cfg}
 	e := check.checkStream(&j)
 	if e != nil {
@@ -73,11 +73,11 @@ func (a *Engine) Stream(ctx context.Context, j video.Stream) (video.Result, erro
 	return r.process(ctx)
 }
 
-// Video — одна job с одним MP4 (см. process)
+// Video runs one job with a single MP4 (see process)
 func (a *Engine) Video(ctx context.Context, j video.Video) (video.Result, error) {
 	r := &videoRun{work: a.newWork(proto.Video, j.ID, j.Input)}
 
-	// проверка на копии: job вызывающего не меняется
+	// check a copy: the caller's job is not changed
 	check := videoCheck{cfg: a.cfg}
 	e := check.checkVideo(&j)
 	if e != nil {
@@ -92,18 +92,18 @@ func (a *Engine) Video(ctx context.Context, j video.Video) (video.Result, error)
 	return r.process(ctx)
 }
 
-// process — общий пайплайн Stream и Video: сборка ffmpeg умеет job →
-// слот → таймаут → вход ещё не опубликован (иначе ALREADY_EXISTS или
-// сохранённый результат этой же job) → скачивания → ffprobe и лимиты →
-// план → один запуск ffmpeg и проверка → загрузка волнами, вход
-// последним → результат. Временная папка удаляется в любом случае
+// process is the shared pipeline of Stream and Video: the ffmpeg build supports the job →
+// slot → timeout → entry not yet published (else ALREADY_EXISTS or the
+// saved result of this same job) → downloads → ffprobe and limits →
+// plan → one ffmpeg run and check → upload in waves, entry
+// last → result. The temp folder is removed in any case
 func (a *videoRun) process(ctx context.Context) (video.Result, error) {
 	e := a.supported()
 	if e != nil {
 		return a.fail(e)
 	}
 
-	// шифрование
+	// encryption
 	if a.hls != nil && len(a.hls.Key) > 0 {
 		cipher, err := encrypt.New(a.hls.Key)
 		if err != nil {
@@ -112,14 +112,14 @@ func (a *videoRun) process(ctx context.Context) (video.Result, error) {
 		a.cipher = cipher
 	}
 
-	// слот, таймаут, папка
+	// slot, timeout, folder
 	ctx, end, e := a.begin(ctx, a.engine.cfg.Video.Timeout)
 	if e != nil {
 		return a.fail(e)
 	}
 	defer end()
 
-	// вход уже опубликован: отказ или эта job уже выполнена
+	// entry already published: reject, or this job already ran
 	stored, done, e := a.published(ctx)
 	if e != nil {
 		return a.fail(e)
@@ -128,7 +128,7 @@ func (a *videoRun) process(ctx context.Context) (video.Result, error) {
 		return a.again(stored)
 	}
 
-	// работа
+	// work
 	e = a.download(ctx)
 	if e != nil {
 		return a.fail(e)
@@ -157,8 +157,8 @@ func (a *videoRun) process(ctx context.Context) (video.Result, error) {
 	return a.done()
 }
 
-// supported — каждый кодек и формат картинки job сборка ffmpeg умеет
-// кодировать (необязательные: HEVC, AV1, WebP, AVIF)
+// supported checks that the ffmpeg build can encode every codec and image format
+// of the job (optional ones: HEVC, AV1, WebP, AVIF)
 func (a *videoRun) supported() *code.Error {
 	tools := a.engine.video
 
@@ -181,10 +181,10 @@ func (a *videoRun) supported() *code.Error {
 	return nil
 }
 
-// download — оригинал, звук и водяной знак во временную папку
+// download fetches the source, sound and watermark to the temp folder
 func (a *videoRun) download(ctx context.Context) *code.Error {
 
-	// оригинал
+	// source
 	file, info, e := a.fetch(ctx, "input", a.input, "source")
 	if e != nil {
 		return e
@@ -193,7 +193,7 @@ func (a *videoRun) download(ctx context.Context) *code.Error {
 	a.res.SHA256 = info.SHA256
 	a.res.SourceSize = info.Size
 
-	// звук
+	// sound
 	if a.options.Sound != "" {
 		file, _, e = a.fetch(ctx, "options.sound", a.options.Sound, "sound")
 		if e != nil {
@@ -202,7 +202,7 @@ func (a *videoRun) download(ctx context.Context) *code.Error {
 		a.sound = &videotool.File{Path: file}
 	}
 
-	// водяной знак
+	// watermark
 	if a.options.Watermark != nil {
 		file, _, e = a.fetch(ctx, "options.watermark.input", a.options.Watermark.Input, "watermark")
 		if e != nil {
@@ -214,9 +214,9 @@ func (a *videoRun) download(ctx context.Context) *code.Error {
 	return nil
 }
 
-// probe — скачанные файлы прочитаны и проверены лимитами: видео
-// принятого кодека в пределах длительности и размера, звук принятого
-// кодека, водяной знак — картинка
+// probe reads the downloaded files and checks them against limits: video
+// of an accepted codec within duration and size, sound of an accepted
+// codec, watermark is an image
 func (a *videoRun) probe(ctx context.Context) *code.Error {
 	e := a.probeSource(ctx)
 	if e != nil {
@@ -231,7 +231,7 @@ func (a *videoRun) probe(ctx context.Context) *code.Error {
 	return a.probeMark(ctx)
 }
 
-// probeSource — оригинал
+// probeSource probes the source
 func (a *videoRun) probeSource(ctx context.Context) *code.Error {
 	cfg := a.engine.cfg.Video
 
@@ -261,7 +261,7 @@ func (a *videoRun) probeSource(ctx context.Context) *code.Error {
 	return nil
 }
 
-// probeSound — внешний звук, если есть
+// probeSound probes the external sound, if any
 func (a *videoRun) probeSound(ctx context.Context) *code.Error {
 	if a.sound == nil {
 		return nil
@@ -283,7 +283,7 @@ func (a *videoRun) probeSound(ctx context.Context) *code.Error {
 	return nil
 }
 
-// probeMark — водяной знак, если есть
+// probeMark probes the watermark, if any
 func (a *videoRun) probeMark(ctx context.Context) *code.Error {
 	if a.mark == nil {
 		return nil
@@ -308,8 +308,8 @@ func (a *videoRun) probeMark(ctx context.Context) *code.Error {
 	return nil
 }
 
-// probeError — файл, который ffprobe не прочитал: закончившийся контекст
-// как есть, иначе код c
+// probeError maps a file ffprobe could not read: an ended context
+// as is, otherwise code c
 func (a *videoRun) probeError(ctx context.Context, c code.Code, message string, err error) *code.Error {
 	if ctx.Err() != nil {
 		return code.As(ctx.Err())
@@ -318,8 +318,8 @@ func (a *videoRun) probeError(ctx context.Context, c code.Code, message string, 
 	return code.New(c, message, err)
 }
 
-// planOutputs — план запуска ffmpeg; обработанная шкала тоже в пределах
-// длительности (Speed её меняет)
+// planOutputs plans the ffmpeg run; the processed timeline also stays within
+// the duration (Speed changes it)
 func (a *videoRun) planOutputs() *code.Error {
 	cfg := a.engine.cfg.Video
 	in := videotool.Input{
@@ -355,13 +355,13 @@ func (a *videoRun) planOutputs() *code.Error {
 	return nil
 }
 
-// encode — проход громкости для Options.Normalize, один запуск ffmpeg,
-// потом каждый результат прочитан и проверен
+// encode runs the loudness pass for Options.Normalize, one ffmpeg run,
+// then reads and checks each result
 func (a *videoRun) encode(ctx context.Context) *code.Error {
 	t := time.Now()
 	tools := a.engine.video
 
-	// громкость
+	// loudness
 	err := tools.Normalize(ctx, a.plan)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -384,7 +384,7 @@ func (a *videoRun) encode(ctx context.Context) *code.Error {
 		return code.New(code.EncodeFailed, "ffmpeg failed", err)
 	}
 
-	// проверка результатов
+	// check results
 	report, e := tools.Verify(ctx, a.plan, a.dir)
 	if e != nil {
 		return e
@@ -394,23 +394,23 @@ func (a *videoRun) encode(ctx context.Context) *code.Error {
 	return nil
 }
 
-// upload — всё в хранилище волнами: init и сегменты (с ключом —
-// зашифрованные), превью-картинки и превью; потом media playlist
-// нескольких вариантов (со строками EXT-X-KEY, поэтому после каждого
-// сегмента и его IV); проверка, что всё на месте; результат в журнал;
-// вход последним, тоже проверенный. Вход опубликован = всё опубликовано:
-// job, упавшая раньше, входа не оставляет и может повториться с теми же
-// ключами
+// upload sends everything to storage in waves: init and segments (encrypted
+// with a key), preview images and previews; then the media playlists
+// of multiple variants (with EXT-X-KEY lines, so after each
+// segment and its IV); a check that everything is in place; result to the ledger;
+// entry last, also checked. Entry published = everything published:
+// a job that failed earlier leaves no entry and can be retried with the same
+// keys
 func (a *videoRun) upload(ctx context.Context) *code.Error {
 	a.renditionsOf()
 
-	// волна 1: медиа и дополнения
+	// wave 1: media and extras
 	e := a.putAll(ctx, a.mediaFiles())
 	if e != nil {
 		return e
 	}
 
-	// волна 2: media playlist с IV волны 1
+	// wave 2: media playlists with the IVs from wave 1
 	lists, e := a.mediaPlaylists()
 	if e != nil {
 		return e
@@ -421,23 +421,23 @@ func (a *videoRun) upload(ctx context.Context) *code.Error {
 		return e
 	}
 
-	// вход и результат, который он завершает
+	// entry and the result it completes
 	a.entryOf()
 	a.result()
 
-	// всё, кроме входа, на месте
+	// everything except the entry is in place
 	e = a.stored(ctx, a.required())
 	if e != nil {
 		return e
 	}
 
-	// результат сохраняется до того, как вход сделает job видимой
+	// the result is saved before the entry makes the job visible
 	e = a.remember(ctx, a.res)
 	if e != nil {
 		return e
 	}
 
-	// вход последним
+	// entry last
 	e = a.putAll(ctx, []upload{a.entry})
 	if e != nil {
 		return e
@@ -446,9 +446,9 @@ func (a *videoRun) upload(ctx context.Context) *code.Error {
 	return a.stored(ctx, []string{a.output})
 }
 
-// renditionsOf — опубликованный вид каждого варианта HLS: несколько
-// вариантов — каждый в <папка output>/<name>/ с index.m3u8, единственный
-// вариант — рядом с output, это и есть его playlist
+// renditionsOf builds the published view of each HLS variant: with several
+// variants each goes to <output folder>/<name>/ with index.m3u8, a single
+// variant sits next to output, which is its playlist
 func (a *videoRun) renditionsOf() {
 	if a.hls == nil {
 		return
@@ -474,8 +474,8 @@ func (a *videoRun) renditionsOf() {
 	}
 }
 
-// mediaFiles — волна 1: init и сегменты каждого варианта, превью-картинки,
-// превью
+// mediaFiles lists wave 1: init and segments of each variant, preview images,
+// previews
 func (a *videoRun) mediaFiles() []upload {
 	var list []upload
 
@@ -501,10 +501,10 @@ func (a *videoRun) mediaFiles() []upload {
 	return list
 }
 
-// mediaPlaylists — media playlist каждого варианта как публикуется: с
-// ключом — строка EXT-X-KEY с IV своего сегмента над каждым EXTINF. При
-// нескольких вариантах это волна 2; playlist единственного варианта — сам
-// вход
+// mediaPlaylists builds each variant media playlist as published: with a
+// key, an EXT-X-KEY line with its segment IV above each EXTINF. With
+// several variants this is wave 2; the playlist of a single variant is the
+// entry itself
 func (a *videoRun) mediaPlaylists() ([]upload, *code.Error) {
 	var list []upload
 
@@ -514,7 +514,7 @@ func (a *videoRun) mediaPlaylists() ([]upload, *code.Error) {
 			return nil, code.New(code.InternalTemporaryError, "media playlist missing", err)
 		}
 
-		// строки ключа
+		// key lines
 		if a.cipher != nil {
 			published, err := a.cipher.Playlist(string(text), a.hls.KeyURI, r.track.ivs)
 			if err != nil {
@@ -532,8 +532,8 @@ func (a *videoRun) mediaPlaylists() ([]upload, *code.Error) {
 	return list, nil
 }
 
-// entryOf — вход: master нескольких вариантов, media playlist одного, mp4
-// у Video
+// entryOf builds the entry: master for several variants, media playlist for one, mp4
+// for Video
 func (a *videoRun) entryOf() {
 	switch {
 	case a.hls == nil:
@@ -544,7 +544,7 @@ func (a *videoRun) entryOf() {
 		return
 	}
 
-	// master: каждый вариант измерен по опубликованному
+	// master: each variant measured from what was published
 	master := videotool.Master{Version: a.renditions[0].output.Playlist.Version}
 	for _, r := range a.renditions {
 		peak, average := r.output.Playlist.Bandwidth(r.track.sizes)
@@ -563,8 +563,8 @@ func (a *videoRun) entryOf() {
 	a.entry = upload{key: a.output, data: []byte(master.String())}
 }
 
-// result — измеренный результат: варианты как опубликованы, превью,
-// общий размер всех объектов
+// result builds the measured result: variants as published, previews,
+// total size of all objects
 func (a *videoRun) result() {
 	res := video.Result{
 		ID:         a.id,
@@ -574,7 +574,7 @@ func (a *videoRun) result() {
 	}
 	report := a.report
 
-	// варианты
+	// variants
 	for i, out := range report.Renditions {
 		pr := a.profileResult(a.plan.Renditions[i].Profile, out)
 
@@ -595,12 +595,12 @@ func (a *videoRun) result() {
 	}
 	res.Duration = report.Renditions[0].Media.Duration
 
-	// master нескольких вариантов
+	// master of several variants
 	if a.hls != nil && len(a.renditions) > 1 {
 		res.Size += int64(len(a.entry.data))
 	}
 
-	// дополнения
+	// extras
 	for i, img := range report.Stills {
 		t := a.thumbnails[i]
 		res.Thumbnails = append(res.Thumbnails, video.ImageResult{Output: t.Output, Width: img.Width, Height: img.Height, Format: t.Format, Size: img.Size})
@@ -618,8 +618,8 @@ func (a *videoRun) result() {
 	a.res = res
 }
 
-// profileResult — измерения одного результата; Size — файл (вариант HLS
-// ставит свой)
+// profileResult holds the measurements of one result; Size is the file (an HLS variant
+// sets its own)
 func (a *videoRun) profileResult(p video.Profile, out videotool.Output) video.ProfileResult {
 	m := out.Media
 	pr := video.ProfileResult{
@@ -642,9 +642,9 @@ func (a *videoRun) profileResult(p video.Profile, out videotool.Output) video.Pr
 	return pr
 }
 
-// required — объекты, проверяемые до входа: у каждого варианта media
-// playlist (если вариантов несколько), init, первый и последний сегмент;
-// превью-картинки; превью
+// required lists the objects checked before the entry: for each variant the media
+// playlist (if there are several variants), init, first and last segment;
+// preview images; previews
 func (a *videoRun) required() []string {
 	var keys []string
 
@@ -673,7 +673,7 @@ func (a *videoRun) required() []string {
 	return keys
 }
 
-// done — успешный результат
+// done returns a successful result
 func (a *videoRun) done() (video.Result, error) {
 	a.res.Elapsed = a.elapsed()
 	a.work.done("renditions", len(a.res.Profiles), "duration", a.res.Duration)
@@ -681,7 +681,7 @@ func (a *videoRun) done() (video.Result, error) {
 	return a.res, nil
 }
 
-// again — сохранённый результат job, уже выполненной раньше
+// again returns the saved result of a job that already ran
 func (a *videoRun) again(stored []byte) (video.Result, error) {
 	var res video.Result
 	err := json.Unmarshal(stored, &res)
@@ -693,7 +693,7 @@ func (a *videoRun) again(stored []byte) (video.Result, error) {
 	return res, nil
 }
 
-// fail — упавший результат: id и ошибка, больше ничего не считается
+// fail returns a failed result: id and error, nothing else is computed
 func (a *videoRun) fail(e *code.Error) (video.Result, error) {
 	a.res = video.Result{ID: a.id, Elapsed: a.elapsed(), Error: e}
 	a.work.fail(e)

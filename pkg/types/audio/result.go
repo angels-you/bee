@@ -2,51 +2,51 @@ package audio
 
 import "github.com/angels-you/bee/pkg/types/code"
 
-// Result — результат одного трека: то, что bee измерил. Ключи
-// результатов — ключи клиента (Job.Output, Wave, Meta, Analysis), здесь
-// они не повторяются. У упавшей job есть Error: ни один её результат не
-// считается, что бы уже ни лежало в хранилище
+// Result is the result of one track: what bee measured. Result keys are
+// the client's keys (Job.Output, Wave, Meta, Analysis) and are not repeated
+// here. A failed job has Error: none of its results count, whatever is
+// already in storage
 type Result struct {
 	ID      string `json:"id"`
-	Elapsed int64  `json:"elapsed"` // миллисекунд на всю job
+	Elapsed int64  `json:"elapsed"` // milliseconds for the whole job
 
-	SHA256     string `json:"sha256,omitempty"`      // оригинала
-	SourceSize int64  `json:"source_size,omitempty"` // байт оригинала
-	Size       int64  `json:"size,omitempty"`        // байт опубликовано
+	SHA256     string `json:"sha256,omitempty"`      // of the original
+	SourceSize int64  `json:"source_size,omitempty"` // bytes of the original
+	Size       int64  `json:"size,omitempty"`        // bytes published
 
-	// Encrypted — сегменты HLS зашифрованы Job.Key; false — job без ключа,
-	// HLS открытый
+	// Encrypted means the HLS segments are encrypted with Job.Key; false —
+	// a job without a key, clear HLS
 	Encrypted bool `json:"encrypted"`
 
-	// Renditions — опубликованные варианты в порядке master playlist
+	// Renditions are the published renditions in master playlist order
 	Renditions []Rendition `json:"renditions,omitempty"`
 
-	// Waveform — пики waveform json, по байту на точку (0 тишина, 255
-	// полная шкала), Options.WaveformPoints штук; пусто без Job.Wave.
-	// Base64 в json
+	// Waveform holds the waveform json peaks, one byte per point (0 silence,
+	// 255 full scale), Options.WaveformPoints of them; empty without
+	// Job.Wave. Base64 in json
 	Waveform []byte `json:"waveform,omitempty"`
 
-	Metrics map[string]int64 `json:"metrics,omitempty"` // этап → миллисекунд
+	Metrics map[string]int64 `json:"metrics,omitempty"` // stage → milliseconds
 
 	Meta        *Metadata    `json:"meta,omitempty"`
 	Loudness    *Loudness    `json:"loudness,omitempty"`
 	Quality     *Quality     `json:"quality,omitempty"`
-	Fingerprint *Fingerprint `json:"fingerprint,omitempty"` // только в ответе, в хранилище не пишется
+	Fingerprint *Fingerprint `json:"fingerprint,omitempty"` // only in the response, never written to storage
 	Warnings    []Warning    `json:"warnings,omitempty"`
 
 	Error *code.Error `json:"error,omitempty"`
 }
 
-// Rendition — один опубликованный битрейт HLS
+// Rendition is one published HLS bitrate
 type Rendition struct {
-	Folder           string `json:"folder"`            // рядом с master: <folder>/index.m3u8, init.mp4, seg_NNNN.m4s
-	Bitrate          int    `json:"bitrate"`           // цель AAC, bit/s
-	AverageBandwidth int    `json:"average_bandwidth"` // по опубликованным сегментам, bit/s
-	PeakBandwidth    int    `json:"peak_bandwidth"`    // самого плотного сегмента, bit/s
-	Size             int64  `json:"size"`              // байт опубликовано: media playlist, init и сегменты
+	Folder           string `json:"folder"`            // next to master: <folder>/index.m3u8, init.mp4, seg_NNNN.m4s
+	Bitrate          int    `json:"bitrate"`           // AAC target, bit/s
+	AverageBandwidth int    `json:"average_bandwidth"` // over the published segments, bit/s
+	PeakBandwidth    int    `json:"peak_bandwidth"`    // of the densest segment, bit/s
+	Size             int64  `json:"size"`              // bytes published: media playlist, init and segments
 }
 
-// Warning — некритичное замечание о качестве
+// Warning is a non-critical quality note
 type Warning struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`

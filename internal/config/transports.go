@@ -6,59 +6,59 @@ import (
 	"time"
 )
 
-// HTTP — приём job по http, health и metrics; пустой Addr — выключен
+// HTTP receives jobs over http, serves health and metrics; empty Addr disables it
 type HTTP struct {
 	Addr string `env:"ADDR"` // :8080
 }
 
-// Enabled — транспорт включён
+// Enabled reports whether the transport is enabled
 func (a *HTTP) Enabled() bool {
 	return a.Addr != ""
 }
 
-// GRPC — приём job по grpc; пустой Addr — выключен
+// GRPC receives jobs over grpc; empty Addr disables it
 type GRPC struct {
 	Addr string `env:"ADDR"` // :9090
 }
 
-// Enabled — транспорт включён
+// Enabled reports whether the transport is enabled
 func (a *GRPC) Enabled() bool {
 	return a.Addr != ""
 }
 
-// NATS — приём job из NATS JetStream; пустой URL — выключен. Name — имя
-// stream, subjects и consumer этого bee: у bee с разными бакетами на одном
-// nats имена должны быть разными
+// NATS receives jobs from NATS JetStream; empty URL disables it. Name is the
+// stream, subjects and consumer name of this bee: bees with different buckets
+// on the same nats must use different names
 type NATS struct {
-	URL  string `env:"URL"`  // nats://host:4222, учётные данные внутри url
-	Name string `env:"NAME"` // stream BEE, subjects bee.audio.new и т.д., consumer bee
+	URL  string `env:"URL"`  // nats://host:4222, credentials inside the url
+	Name string `env:"NAME"` // stream BEE, subjects bee.audio.new etc., consumer bee
 
-	// AckWait — сколько доставка живёт без признаков жизни, прежде чем
-	// JetStream отдаст её другому bee; работающая job шлёт прогресс каждые
+	// AckWait is how long a delivery lives without signs of life before
+	// JetStream hands it to another bee; a running job sends progress every
 	// AckWait / 3
 	AckWait time.Duration `env:"ACK_WAIT"`
 
-	// MaxDeliver — доставок одной job: ошибка последней окончательна
+	// MaxDeliver is the number of deliveries of one job: the last one's error is final
 	MaxDeliver    int           `env:"MAX_DELIVER"`
-	RetryDelay    time.Duration `env:"RETRY_DELAY"`     // задержка nak после первой доставки, дальше удваивается
-	RetryMaxDelay time.Duration `env:"RETRY_MAX_DELAY"` // самая длинная задержка nak
+	RetryDelay    time.Duration `env:"RETRY_DELAY"`     // nak delay after the first delivery, doubled afterwards
+	RetryMaxDelay time.Duration `env:"RETRY_MAX_DELAY"` // longest nak delay
 
-	// stream и журнал результатов: work queue, сообщение живёт до ack
-	Storage  string        `env:"STORAGE"`  // file или memory
-	Replicas int           `env:"REPLICAS"` // 1..5, не больше серверов кластера
-	MaxAge   time.Duration `env:"MAX_AGE"`  // неразобранное сообщение удаляется через это время; 0 — никогда
+	// stream and result log: work queue, a message lives until ack
+	Storage  string        `env:"STORAGE"`  // file or memory
+	Replicas int           `env:"REPLICAS"` // 1..5, at most the number of cluster servers
+	MaxAge   time.Duration `env:"MAX_AGE"`  // an unprocessed message is deleted after this time; 0 means never
 
-	// ResultTTL — сколько журнал хранит результат готовой job: дольше, чем
-	// job может ждать передоставку
+	// ResultTTL is how long the log keeps the result of a finished job: longer than
+	// a job may wait for redelivery
 	ResultTTL time.Duration `env:"RESULT_TTL"`
 }
 
-// Enabled — транспорт включён
+// Enabled reports whether the transport is enabled
 func (a *NATS) Enabled() bool {
 	return a.URL != ""
 }
 
-// defaults — проверенные в работе значения
+// defaults are values proven in production
 func (a *NATS) defaults() {
 	a.Name = "bee"
 	a.AckWait = time.Minute
@@ -71,7 +71,7 @@ func (a *NATS) defaults() {
 	a.ResultTTL = 24 * time.Hour
 }
 
-// validate — поля включённого nats в своих пределах
+// validate checks that the enabled nats fields are within their limits
 func (a *NATS) validate() (errs []error) {
 	// the name goes into stream names and subjects: a-z, 0-9, _ and -
 	for _, r := range a.Name {

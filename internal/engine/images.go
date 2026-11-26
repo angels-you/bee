@@ -15,40 +15,40 @@ import (
 	"github.com/angels-you/bee/pkg/types/images"
 )
 
-// imagesRun — состояние одной job картинок
+// imagesRun is the state of one image job
 type imagesRun struct {
 	*work
 	job     images.Job
 	res     images.Result
-	source  string             // скачанный файл
-	norm    imagetool.Source   // декодированный оригинал, из него делается каждый результат
-	outputs []imagetool.Output // по порядку задач
+	source  string             // downloaded file
+	norm    imagetool.Source   // decoded source, every result is made from it
+	outputs []imagetool.Output // in task order
 }
 
-// Images — одна job картинок: проверка → скачивание → заголовок, лимиты и
-// одно декодирование → каждый результат по порядку, проверенный →
-// загрузка всех → результат. Результаты загружаются только когда сделаны
-// все, поэтому job, упавшая до загрузки, хранилище не трогает; повтор
-// перезаписывает. Упавшая job возвращает Result с Error и тот же
-// *code.Error как ошибку
+// Images runs one image job: check → download → header, limits and
+// a single decode → each result in order, checked →
+// upload of all → result. Results are uploaded only when all
+// are made, so a job that fails before upload does not touch storage; a retry
+// overwrites. A failed job returns a Result with Error and the same
+// *code.Error as the error
 func (a *Engine) Images(ctx context.Context, j images.Job) (images.Result, error) {
 	r := &imagesRun{work: a.newWork(proto.Images, j.ID, j.Input), job: j}
 
-	// проверка на копии: job вызывающего не меняется
+	// check a copy: the caller's job is not changed
 	r.job.Tasks = slices.Clone(j.Tasks)
 	e := a.checkImages(&r.job)
 	if e != nil {
 		return r.fail(e)
 	}
 
-	// слот, таймаут, папка
+	// slot, timeout, folder
 	ctx, end, e := r.begin(ctx, a.cfg.Images.Timeout)
 	if e != nil {
 		return r.fail(e)
 	}
 	defer end()
 
-	// работа
+	// work
 	e = r.download(ctx)
 	if e != nil {
 		return r.fail(e)
@@ -72,8 +72,8 @@ func (a *Engine) Images(ctx context.Context, j images.Job) (images.Result, error
 	return r.done()
 }
 
-// checkImages — job без лимитов (Validate типа), потом лимиты bee и
-// дефолты пустых параметров профиля
+// checkImages checks the job without limits (the type's Validate), then bee limits and
+// defaults for empty profile parameters
 func (a *Engine) checkImages(j *images.Job) *code.Error {
 	e := j.Validate()
 	if e != nil {
@@ -84,7 +84,7 @@ func (a *Engine) checkImages(j *images.Job) *code.Error {
 	for i := range j.Tasks {
 		p := &j.Tasks[i].Profile
 
-		// коробка не больше лимита
+		// box no larger than the limit
 		switch {
 		case p.MaxWidth > limit:
 			return code.New(code.InvalidDimensions, fmt.Sprintf("task %s: max_width must be within 0..%d", j.Tasks[i].ID, limit), nil)
@@ -92,7 +92,7 @@ func (a *Engine) checkImages(j *images.Job) *code.Error {
 			return code.New(code.InvalidDimensions, fmt.Sprintf("task %s: max_height must be within 0..%d", j.Tasks[i].ID, limit), nil)
 		}
 
-		// дефолты bee
+		// bee defaults
 		p.Fit = p.FitOrInside()
 		if p.MinQuality == 0 {
 			p.MinQuality = a.cfg.Images.MinQuality
@@ -107,7 +107,7 @@ func (a *Engine) checkImages(j *images.Job) *code.Error {
 	return nil
 }
 
-// download — оригинал в <dir>/source
+// download fetches the source to <dir>/source
 func (a *imagesRun) download(ctx context.Context) *code.Error {
 	file, info, e := a.fetch(ctx, "input", a.job.Input, "source")
 	if e != nil {
@@ -120,7 +120,7 @@ func (a *imagesRun) download(ctx context.Context) *code.Error {
 	return nil
 }
 
-// decode — заголовок, лимит пикселей, потом одно декодирование оригинала
+// decode reads the header, checks the pixel limit, then decodes the source once
 func (a *imagesRun) decode(ctx context.Context) *code.Error {
 	t := time.Now()
 	defer a.took(&a.processMs, t)
@@ -128,7 +128,7 @@ func (a *imagesRun) decode(ctx context.Context) *code.Error {
 	tools := a.engine.images
 	cfg := a.engine.cfg.Images
 
-	// заголовок
+	// header
 	info, err := tools.Probe(ctx, a.source)
 	if err != nil {
 		return code.As(err)
@@ -140,43 +140,43 @@ func (a *imagesRun) decode(ctx context.Context) *code.Error {
 	a.res.SourceHeight = h
 	a.log = a.log.With("source_size", a.res.SourceSize, "source_format", info.Format.String(), "source_width", w, "source_height", h)
 
-	// лимит пикселей
+	// pixel limit
 	limit := int64(cfg.MaxMegapixels) * 1_000_000
 	if int64(w)*int64(h) > limit {
 		return code.New(code.PixelLimitExceeded, fmt.Sprintf("source %dx%d is above %d megapixels", w, h, cfg.MaxMegapixels), nil)
 	}
 
-	// декодирование
+	// decode
 	a.norm, err = tools.Normalize(ctx, a.source, info, filepath.Join(a.dir, "source.tif"))
 	if err != nil {
 		return code.As(err)
 	}
 
-	// дальше нужна только декодированная копия
+	// only the decoded copy is needed from here on
 	os.Remove(a.source)
 	return nil
 }
 
-// render — каждый результат по порядку задач, по одному; первая ошибка
-// роняет job
+// render makes each result in task order, one at a time; the first error
+// fails the job
 func (a *imagesRun) render(ctx context.Context) *code.Error {
 	cfg := a.engine.cfg.Images
 
 	for i, task := range a.job.Tasks {
 		t := time.Now()
 
-		// результат
+		// result
 		out, err := a.engine.images.Render(ctx, a.norm, task.Profile, a.dir, strconv.Itoa(i), task.Profile.MinQuality, cfg.MaxDimension)
 		if err != nil {
 			e := code.As(err)
 			return code.New(e.Code, "task "+task.ID+": "+e.Message, e.Err)
 		}
 
-		// время
+		// timing
 		elapsed := time.Since(t)
 		a.processing(t)
 
-		// результат задачи
+		// task result
 		a.outputs = append(a.outputs, out)
 		a.res.Tasks = append(a.res.Tasks, images.TaskResult{
 			ID:            task.ID,
@@ -199,7 +199,7 @@ func (a *imagesRun) render(ctx context.Context) *code.Error {
 	return nil
 }
 
-// upload — все результаты одной волной
+// upload uploads all results in one wave
 func (a *imagesRun) upload(ctx context.Context) *code.Error {
 	list := make([]upload, 0, len(a.outputs))
 	for i, out := range a.outputs {
@@ -213,7 +213,7 @@ func (a *imagesRun) upload(ctx context.Context) *code.Error {
 	return a.putAll(ctx, list)
 }
 
-// done — успешный результат
+// done returns a successful result
 func (a *imagesRun) done() (images.Result, error) {
 	a.res.ID = a.job.ID
 	a.res.Elapsed = a.elapsed()
@@ -222,7 +222,7 @@ func (a *imagesRun) done() (images.Result, error) {
 	return a.res, nil
 }
 
-// fail — упавший результат: без задач, что известно об оригинале, ошибка
+// fail returns a failed result: no tasks, what is known about the source, the error
 func (a *imagesRun) fail(e *code.Error) (images.Result, error) {
 	a.res.ID = a.job.ID
 	a.res.Tasks = nil

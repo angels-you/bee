@@ -5,26 +5,26 @@ import (
 	"time"
 )
 
-// Video — лимиты видео job и дефолты для пустых полей video job
+// Video holds video job limits and defaults for empty video job fields
 type Video struct {
 
-	// лимиты сервера: job их не меняет
-	Timeout      time.Duration `env:"TIMEOUT"`       // одна job, от скачивания до загрузки
-	MaxSourceMB  int64         `env:"MAX_SOURCE_MB"` // каждый скачанный файл (видео, звук, водяной знак), MiB
-	MinDuration  time.Duration `env:"MIN_DURATION"`  // самый короткий оригинал и результат
-	MaxDuration  time.Duration `env:"MAX_DURATION"`  // самый длинный оригинал и результат
-	MaxDimension int           `env:"MAX_DIMENSION"` // самая длинная сторона кадра оригинала и результата, px
-	Threads      int           `env:"THREADS"`       // потоков одного запуска ffmpeg
+	// server limits: a job cannot change them
+	Timeout      time.Duration `env:"TIMEOUT"`       // one job, from download to upload
+	MaxSourceMB  int64         `env:"MAX_SOURCE_MB"` // each downloaded file (video, sound, watermark), MiB
+	MinDuration  time.Duration `env:"MIN_DURATION"`  // shortest original and result
+	MaxDuration  time.Duration `env:"MAX_DURATION"`  // longest original and result
+	MaxDimension int           `env:"MAX_DIMENSION"` // longest frame side of the original and the result, px
+	Threads      int           `env:"THREADS"`       // threads of one ffmpeg run
 
-	// дефолты обработки: пустое поле job = это значение
-	SoundBitrate   int     `env:"SOUND_BITRATE"`   // AAC kbit/s профиля с sound_bitrate 0
-	WatermarkWidth int     `env:"WATERMARK_WIDTH"` // ширина водяного знака с width 0, px
-	ImageQuality   int     `env:"IMAGE_QUALITY"`   // качество превью-картинки с quality 0, 1..100
-	LUFS           float64 `env:"LUFS"`            // цель громкости options.normalize, -70..-5 LUFS
-	TruePeak       float64 `env:"TRUE_PEAK"`       // потолок true peak options.normalize, -9..0 dBTP
+	// processing defaults: an empty job field = this value
+	SoundBitrate   int     `env:"SOUND_BITRATE"`   // AAC kbit/s of a profile with sound_bitrate 0
+	WatermarkWidth int     `env:"WATERMARK_WIDTH"` // watermark width with width 0, px
+	ImageQuality   int     `env:"IMAGE_QUALITY"`   // preview image quality with quality 0, 1..100
+	LUFS           float64 `env:"LUFS"`            // loudness target of options.normalize, -70..-5 LUFS
+	TruePeak       float64 `env:"TRUE_PEAK"`       // true peak ceiling of options.normalize, -9..0 dBTP
 }
 
-// defaults — проверенные в работе значения
+// defaults are values proven in production
 func (a *Video) defaults() {
 	a.Timeout = 10 * time.Minute
 	a.MaxSourceMB = 500
@@ -40,10 +40,10 @@ func (a *Video) defaults() {
 	a.TruePeak = -1.5
 }
 
-// validate — все поля в своих пределах
+// validate checks that all fields are within their limits
 func (a *Video) validate(download time.Duration) (errs []error) {
 
-	// лимиты
+	// limits
 	if a.Timeout <= 0 {
 		errs = append(errs, errors.New("config: BEE_VIDEO_TIMEOUT must be positive"))
 	}
@@ -72,7 +72,7 @@ func (a *Video) validate(download time.Duration) (errs []error) {
 		errs = append(errs, errors.New("config: BEE_VIDEO_THREADS must be at least 1"))
 	}
 
-	// дефолты обработки
+	// processing defaults
 	if !(a.SoundBitrate >= 16 && a.SoundBitrate <= 512) {
 		errs = append(errs, errors.New("config: BEE_VIDEO_SOUND_BITRATE must be within 16..512 kbit/s"))
 	}

@@ -10,40 +10,40 @@ import (
 	"github.com/angels-you/bee/pkg/storage/s3/provider"
 )
 
-// Storage — единственное хранилище bee: Kind выбирает local или s3, и
-// обязательны только ключи выбранного вида
+// Storage is the single bee storage: Kind selects local or s3, and only
+// the keys of the chosen kind are required
 type Storage struct {
-	Kind  string     `env:"STORAGE"` // s3 или local, обязательно
+	Kind  string     `env:"STORAGE"` // s3 or local, required
 	Local LocalStore `prefix:"LOCAL_"`
 	S3    S3Store    `prefix:"S3_"`
 }
 
-// LocalStore — папка на диске
+// LocalStore is a folder on disk
 type LocalStore struct {
-	Dir string `env:"DIR"` // корень, обязательно для local
+	Dir string `env:"DIR"` // root, required for local
 }
 
-// S3Store — один бакет любого s3 провайдера. Пустые Endpoint, Region,
-// Account и Prefix имеют смысл: endpoint и регион провайдера, без
-// аккаунта, без префикса
+// S3Store is one bucket of any s3 provider. Empty Endpoint, Region,
+// Account and Prefix are meaningful: provider endpoint and region, no
+// account, no prefix
 type S3Store struct {
-	Provider string `env:"PROVIDER"` // cloudflare, hetzner, aws, minio, ... (pkg/storage/s3/provider), обязательно
-	Endpoint string `env:"ENDPOINT"` // пусто — по шаблону провайдера
-	Region   string `env:"REGION"`   // пусто — регион провайдера
-	Account  string `env:"ACCOUNT"`  // cloudflare account id и т.п.
-	Key      string `env:"KEY"`      // обязательно
-	Secret   string `env:"SECRET"`   // обязательно
-	Bucket   string `env:"BUCKET"`   // обязательно
-	Prefix   string `env:"PREFIX"`   // папка внутри бакета; пусто — корень
-	Secure   bool   `env:"SECURE"`   // https; учитывается только у своих (minio, ceph), облачные всегда https
+	Provider string `env:"PROVIDER"` // cloudflare, hetzner, aws, minio, ... (pkg/storage/s3/provider), required
+	Endpoint string `env:"ENDPOINT"` // empty means the provider template
+	Region   string `env:"REGION"`   // empty means the provider region
+	Account  string `env:"ACCOUNT"`  // cloudflare account id etc.
+	Key      string `env:"KEY"`      // required
+	Secret   string `env:"SECRET"`   // required
+	Bucket   string `env:"BUCKET"`   // required
+	Prefix   string `env:"PREFIX"`   // folder inside the bucket; empty means the root
+	Secure   bool   `env:"SECURE"`   // https; only applies to self-hosted (minio, ceph), cloud providers always use https
 }
 
-// defaults — у хранилища нет дефолтов, кроме https
+// defaults: storage has no defaults except https
 func (a *Storage) defaults() {
 	a.S3.Secure = true
 }
 
-// validate — вид известен и ключи этого вида заданы
+// validate checks that the kind is known and its keys are set
 func (a *Storage) validate() (errs []error) {
 	switch a.Kind {
 	case "local":
@@ -61,7 +61,7 @@ func (a *Storage) validate() (errs []error) {
 	return
 }
 
-// validate — обязательные ключи бакета и известный провайдер
+// validate checks the required bucket keys and a known provider
 func (a *S3Store) validate() (errs []error) {
 	if !a.provider().Valid() {
 		errs = append(errs, fmt.Errorf("config: BEE_S3_PROVIDER %q is not known", a.Provider))
@@ -82,12 +82,12 @@ func (a *S3Store) validate() (errs []error) {
 	return
 }
 
-// provider — провайдер по имени, 0 если неизвестен
+// provider returns the provider by name, 0 if unknown
 func (a *S3Store) provider() provider.Provider {
 	return provider.Provider(provider.ProviderIndex(a.Provider))
 }
 
-// Open — хранилище выбранного вида; бакет s3 проверяется Ping
+// Open opens the storage of the chosen kind; an s3 bucket is checked with Ping
 func (a *Storage) Open() (storage.Storage, error) {
 	switch a.Kind {
 	case "local":

@@ -2,17 +2,17 @@ package config
 
 import "errors"
 
-// Tools — бинарники обработки: путь или имя в PATH. Образ docker ставит
-// все пять
+// Tools are the processing binaries: a path or a name in PATH. The docker image
+// installs all five
 type Tools struct {
-	FFmpeg     string `env:"FFMPEG"`     // аудио и видео
-	FFprobe    string `env:"FFPROBE"`    // аудио и видео
-	Fpcalc     string `env:"FPCALC"`     // chromaprint для fingerprint аудио; пусто — нет
-	Vips       string `env:"VIPS"`       // картинки
-	VipsHeader string `env:"VIPSHEADER"` // картинки
+	FFmpeg     string `env:"FFMPEG"`     // audio and video
+	FFprobe    string `env:"FFPROBE"`    // audio and video
+	Fpcalc     string `env:"FPCALC"`     // chromaprint for audio fingerprint; empty means none
+	Vips       string `env:"VIPS"`       // images
+	VipsHeader string `env:"VIPSHEADER"` // images
 }
 
-// defaults — имена в PATH
+// defaults are names in PATH
 func (a *Tools) defaults() {
 	a.FFmpeg = "ffmpeg"
 	a.FFprobe = "ffprobe"
@@ -21,8 +21,8 @@ func (a *Tools) defaults() {
 	a.VipsHeader = "vipsheader"
 }
 
-// validate — все бинарники заданы; fpcalc нужен, если fingerprint
-// включён по умолчанию
+// validate checks that all binaries are set; fpcalc is required if fingerprint
+// is enabled by default
 func (a *Tools) validate(fingerprint bool) (errs []error) {
 	if a.FFmpeg == "" {
 		errs = append(errs, errors.New("config: BEE_FFMPEG is required"))
@@ -40,7 +40,7 @@ func (a *Tools) validate(fingerprint bool) (errs []error) {
 		errs = append(errs, errors.New("config: BEE_VIPSHEADER is required"))
 	}
 
-	// fingerprint по умолчанию без fpcalc невозможен
+	// fingerprint by default is impossible without fpcalc
 	if fingerprint {
 		if a.Fpcalc == "" {
 			errs = append(errs, errors.New("config: BEE_AUDIO_FINGERPRINT needs BEE_FPCALC"))

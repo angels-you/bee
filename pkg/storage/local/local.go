@@ -1,5 +1,5 @@
-// Package local — хранилище bee в папке на диске: для локального запуска
-// и тестов без s3
+// Package local is a bee storage in a folder on disk: for local runs
+// and tests without s3
 package local
 
 import (
@@ -12,12 +12,12 @@ import (
 	"github.com/angels-you/bee/pkg/tools"
 )
 
-// Local — файлы под Dir; реализует storage.Storage
+// Local stores files under Dir; implements storage.Storage
 type Local struct {
 	Dir string
 }
 
-// New — хранилище в папке dir, папка создаётся при необходимости
+// New returns a storage in folder dir, the folder is created if needed
 func New(dir string) (*Local, error) {
 	if dir == "" {
 		return nil, errors.New("storage: local dir is required")
@@ -31,28 +31,28 @@ func New(dir string) (*Local, error) {
 	return &Local{Dir: dir}, nil
 }
 
-// Put — запись через временный файл и rename: объект появляется целиком
+// Put writes through a temporary file and rename: the object appears whole
 func (a *Local) Put(ctx context.Context, key string, body io.Reader, size int64, contentType string) error {
 	err := ctx.Err()
 	if err != nil {
 		return err
 	}
 
-	// папка объекта
+	// object folder
 	name := a.file(key)
 	err = os.MkdirAll(filepath.Dir(name), 0o755)
 	if err != nil {
 		return err
 	}
 
-	// временный файл
+	// temporary file
 	tmp := name + ".tmp"
 	f, err := os.Create(tmp)
 	if err != nil {
 		return err
 	}
 
-	// тело
+	// body
 	_, err = io.Copy(f, body)
 	if err != nil {
 		f.Close()
@@ -66,11 +66,11 @@ func (a *Local) Put(ctx context.Context, key string, body io.Reader, size int64,
 		return err
 	}
 
-	// готовый объект
+	// finished object
 	return os.Rename(tmp, name)
 }
 
-// Exists — файл есть; отсутствие — false без ошибки
+// Exists reports whether the file exists; absence is false without an error
 func (a *Local) Exists(ctx context.Context, key string) (bool, error) {
 	err := ctx.Err()
 	if err != nil {
@@ -88,7 +88,7 @@ func (a *Local) Exists(ctx context.Context, key string) (bool, error) {
 	return false, err
 }
 
-// Ping — папка есть и это папка
+// Ping checks that the folder exists and is a folder
 func (a *Local) Ping(ctx context.Context) error {
 	err := ctx.Err()
 	if err != nil {
@@ -107,7 +107,7 @@ func (a *Local) Ping(ctx context.Context) error {
 	return nil
 }
 
-// file — путь файла по ключу, ключ всегда внутри Dir
+// file returns the file path for a key, the key always stays inside Dir
 func (a *Local) file(key string) string {
 	key = tools.CleanKey(key)
 

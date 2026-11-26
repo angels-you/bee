@@ -48,10 +48,10 @@ FitIndexes() []Fit             All values
 type Fit string
 
 const (
-	Inside  = Fit("inside")  //Без обрезки, сохраняет пропорции
-	Cover   = Fit("cover")   //Заполнение с обрезкой
-	Contain = Fit("contain") //Вписывание с добавлением фона
-	Fill    = Fit("fill")    //Растягивание
+	Inside  = Fit("inside")  //No crop, keeps the aspect ratio
+	Cover   = Fit("cover")   //Fills the box, crops the excess
+	Contain = Fit("contain") //Fits inside, pads with the background
+	Fill    = Fit("fill")    //Stretches
 )
 
 func (a Fit) String() string {

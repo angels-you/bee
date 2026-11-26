@@ -21,18 +21,18 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-// Bucket — один бакет любого провайдера. С Creds.Domain Upload
-// возвращает публичную ссылку, без него — ключ объекта. Ошибка конфига
-// не теряется: её вернёт любой метод, проверка — Ping
+// Bucket is one bucket of any provider. With Creds.Domain Upload
+// returns a public link, without it the object key. A config error
+// is not lost: any method returns it, Ping checks it
 type Bucket struct {
 	creds Creds
 	conn  *minio.Client
-	err   error // ошибка конфига или подключения
+	err   error // config or connection error
 
-	presignMaxTTL time.Duration // подпись s3 v4 живёт максимум 7 дней
+	presignMaxTTL time.Duration // an s3 v4 signature lives at most 7 days
 }
 
-// NewBucket — бакет по creds; подключение проверяет Ping
+// NewBucket returns a bucket for creds; Ping checks the connection
 func NewBucket(creds Creds) *Bucket {
 	a := &Bucket{creds: creds}
 	a.open()
@@ -40,18 +40,18 @@ func NewBucket(creds Creds) *Bucket {
 	return a
 }
 
-// open — подготовка creds и подключение; ошибка остаётся в a.err и
-// возвращается из каждого метода (и из Ping)
+// open prepares creds and connects; the error stays in a.err and
+// is returned from every method (and from Ping)
 func (a *Bucket) open() {
 	a.presignMaxTTL = 7 * 24 * time.Hour
 
-	// creds и дефолты провайдера
+	// creds and provider defaults
 	a.err = a.creds.prepare()
 	if a.err != nil {
 		return
 	}
 
-	// транспорт
+	// transport
 	transport := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
 		DialContext:           a.dial,
@@ -63,7 +63,7 @@ func (a *Bucket) open() {
 		DisableCompression:    true,
 	}
 
-	// клиент
+	// client
 	options := &minio.Options{
 		Creds:     credentials.NewStaticV4(a.creds.Key, a.creds.Secret, ""),
 		Secure:    a.creds.Secure,
@@ -73,29 +73,29 @@ func (a *Bucket) open() {
 	a.conn, a.err = minio.New(a.creds.Endpoint, options)
 }
 
-// dial — только ipv4
+// dial uses ipv4 only
 func (a *Bucket) dial(ctx context.Context, network, address string) (net.Conn, error) {
 	d := net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
 
 	return d.DialContext(ctx, "tcp4", address)
 }
 
-// Name — имя бакета
+// Name returns the bucket name
 func (a *Bucket) Name() string {
 	return a.creds.Bucket
 }
 
-// Provider — провайдер бакета
+// Provider returns the bucket provider
 func (a *Bucket) Provider() provider.Provider {
 	return a.creds.Provider
 }
 
-// Upload — загрузка из памяти, см. UploadReader
+// Upload uploads from memory, see UploadReader
 func (a *Bucket) Upload(name string, body []byte, meta ...Meta) (link string, err error) {
 	return a.UploadReader(name, bytes.NewReader(body), int64(len(body)), meta...)
 }
 
-// UploadFile — загрузка локального файла from в to, см. UploadReader
+// UploadFile uploads local file from to to, see UploadReader
 func (a *Bucket) UploadFile(from, to string, meta ...Meta) (link string, err error) {
 	f, err := os.Open(from)
 	if err != nil {
@@ -111,22 +111,22 @@ func (a *Bucket) UploadFile(from, to string, meta ...Meta) (link string, err err
 	return a.UploadReader(to, f, info.Size(), meta...)
 }
 
-// UploadReader — загрузка потоком под ключ name. size -1, если размер
-// неизвестен: тогда multipart частями. Content-Type по расширению, если
-// не задан в meta. С Domain возвращает ссылку, без него — ключ
+// UploadReader streams an upload under key name. size is -1 if the size
+// is unknown: then multipart in parts. Content-Type by extension if
+// not set in meta. With Domain returns a link, without it the key
 func (a *Bucket) UploadReader(name string, body io.Reader, size int64, meta ...Meta) (link string, err error) {
 	err = a.err
 	if err != nil {
 		return
 	}
 
-	// ключ
+	// key
 	key := tools.CleanKey(name)
 	if key == "" {
 		return "", errors.New("s3: object name is required")
 	}
 
-	// заголовки объекта
+	// object headers
 	var options Meta
 	if len(meta) > 0 {
 		options = meta[0]
@@ -138,7 +138,7 @@ func (a *Bucket) UploadReader(name string, body io.Reader, size int64, meta ...M
 	c, cancel := a.context()
 	defer cancel()
 
-	// загрузка
+	// upload
 	_, err = a.conn.PutObject(c, a.creds.Bucket, key, body, size, options)
 	if err != nil {
 		return
@@ -151,7 +151,7 @@ func (a *Bucket) UploadReader(name string, body io.Reader, size int64, meta ...M
 	return a.Link(key), nil
 }
 
-// Link — постоянная ссылка на объект по ключу; пусто без Domain
+// Link returns a permanent link to an object by key; empty without Domain
 func (a *Bucket) Link(key string) (link string) {
 	key = tools.CleanKey(key)
 
@@ -165,7 +165,7 @@ func (a *Bucket) Link(key string) (link string) {
 	return a.creds.Domain + "/" + key
 }
 
-// Get — объект целиком в память
+// Get reads a whole object into memory
 func (a *Bucket) Get(key string) (body []byte, err error) {
 	o, err := a.GetReader(key)
 	if err != nil {
@@ -176,7 +176,7 @@ func (a *Bucket) Get(key string) (body []byte, err error) {
 	return io.ReadAll(o)
 }
 
-// GetLink — объект по публичной ссылке
+// GetLink reads an object by its public link
 func (a *Bucket) GetLink(link string) (body []byte, err error) {
 	u, err := url.Parse(link)
 	if err != nil {
@@ -186,8 +186,8 @@ func (a *Bucket) GetLink(link string) (body []byte, err error) {
 	return a.Get(u.Path)
 }
 
-// GetReader — объект потоком; закрыть обязательно. Ошибка «нет объекта»
-// приходит сразу, а не при первом чтении
+// GetReader streams an object; it must be closed. A "no object" error
+// comes immediately, not on the first read
 func (a *Bucket) GetReader(key string) (body io.ReadCloser, err error) {
 	err = a.err
 	if err != nil {
@@ -204,7 +204,7 @@ func (a *Bucket) GetReader(key string) (body io.ReadCloser, err error) {
 		return
 	}
 
-	// GetObject ленивый: запрос уходит на первом чтении или Stat
+	// GetObject is lazy: the request is sent on the first read or Stat
 	_, err = o.Stat()
 	if err != nil {
 		o.Close()
@@ -214,7 +214,7 @@ func (a *Bucket) GetReader(key string) (body io.ReadCloser, err error) {
 	return o, nil
 }
 
-// Stat — метаданные объекта без тела
+// Stat returns object metadata without the body
 func (a *Bucket) Stat(key string) (res File, err error) {
 	err = a.err
 	if err != nil {
@@ -237,8 +237,8 @@ func (a *Bucket) Stat(key string) (res File, err error) {
 	return a.file(info), nil
 }
 
-// Exists — есть ли объект. Отсутствие — false без ошибки, ошибка только
-// при сбое запроса
+// Exists reports whether the object exists. Absence is false without an error, an error only
+// on a request failure
 func (a *Bucket) Exists(key string) (ok bool, err error) {
 	_, err = a.Stat(key)
 	if err == nil {
@@ -256,9 +256,9 @@ func (a *Bucket) Exists(key string) (ok bool, err error) {
 	return false, err
 }
 
-// List — объекты с ключом, начинающимся с prefix (рекурсивно). limit <= 0
-// — все. "v1/file1" найдёт v1/file1, v1/file1.jpg, v1/file1/a.m3u8;
-// "v1/dir/" — только содержимое папки
+// List returns objects whose key starts with prefix (recursively). limit <= 0
+// means all. "v1/file1" finds v1/file1, v1/file1.jpg, v1/file1/a.m3u8;
+// "v1/dir/" only the folder contents
 func (a *Bucket) List(prefix string, limit int) (res []File, err error) {
 	err = a.err
 	if err != nil {
@@ -286,7 +286,7 @@ func (a *Bucket) List(prefix string, limit int) (res []File, err error) {
 	return
 }
 
-// Copy — копия объекта внутри бакета
+// Copy copies an object inside the bucket
 func (a *Bucket) Copy(from, to string) (err error) {
 	err = a.err
 	if err != nil {
@@ -314,7 +314,7 @@ func (a *Bucket) Copy(from, to string) (err error) {
 	return
 }
 
-// Move — копия и удаление исходника (в s3 нет переименования)
+// Move copies and deletes the source (s3 has no rename)
 func (a *Bucket) Move(from, to string) (err error) {
 	if tools.CleanKey(from) == tools.CleanKey(to) {
 		return a.err
@@ -328,7 +328,7 @@ func (a *Bucket) Move(from, to string) (err error) {
 	return a.Delete(from)
 }
 
-// Delete — удалить объект; отсутствующий ключ не ошибка
+// Delete deletes an object; a missing key is not an error
 func (a *Bucket) Delete(key string) (err error) {
 	err = a.err
 	if err != nil {
@@ -346,7 +346,7 @@ func (a *Bucket) Delete(key string) (err error) {
 	return a.conn.RemoveObject(c, a.creds.Bucket, key, minio.RemoveObjectOptions{})
 }
 
-// DeleteLink — удалить объект по публичной ссылке
+// DeleteLink deletes an object by its public link
 func (a *Bucket) DeleteLink(link string) (err error) {
 	u, err := url.Parse(link)
 	if err != nil {
@@ -356,15 +356,15 @@ func (a *Bucket) DeleteLink(link string) (err error) {
 	return a.Delete(u.Path)
 }
 
-// DeleteMany — удалить список объектов пачками (DeleteObjects, до 1000 за
-// запрос). Отсутствующие ключи не ошибка
+// DeleteMany deletes a list of objects in batches (DeleteObjects, up to 1000 per
+// request). Missing keys are not an error
 func (a *Bucket) DeleteMany(keys ...string) (deleted int, err error) {
 	err = a.err
 	if err != nil {
 		return
 	}
 
-	// канал ключей
+	// key channel
 	objects := make(chan minio.ObjectInfo, len(keys))
 	for _, x := range keys {
 		x = tools.CleanKey(x)
@@ -381,10 +381,10 @@ func (a *Bucket) DeleteMany(keys ...string) (deleted int, err error) {
 	return deleted - failed, err
 }
 
-// DeletePrefix — удалить все объекты, чей ключ начинается с prefix:
-// "v1/file1" и "v1/file1*" удалят v1/file1, v1/file1.jpg, v1/file1/hls/0.ts;
-// "v1/dir/" — всё внутри папки v1/dir. Пустой префикс запрещён: весь
-// бакет одной опечаткой
+// DeletePrefix deletes all objects whose key starts with prefix:
+// "v1/file1" and "v1/file1*" delete v1/file1, v1/file1.jpg, v1/file1/hls/0.ts;
+// "v1/dir/" deletes everything inside folder v1/dir. An empty prefix is forbidden: the whole
+// bucket with one typo
 func (a *Bucket) DeletePrefix(prefix string) (deleted int, err error) {
 	err = a.err
 	if err != nil {
@@ -399,14 +399,14 @@ func (a *Bucket) DeletePrefix(prefix string) (deleted int, err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// листинг и удаление идут параллельно: ключи не копятся в памяти
+	// listing and deletion run in parallel: keys do not pile up in memory
 	var listed int
 	var listErr error
 	objects := make(chan minio.ObjectInfo)
 	go a.listTo(ctx, prefix, objects, &listed, &listErr)
 
-	// remove дочитывает канал до закрытия, поэтому после него listTo уже
-	// завершился и listed / listErr можно читать
+	// remove drains the channel until it is closed, so after it listTo has already
+	// finished and listed / listErr can be read
 	failed, err := a.remove(ctx, objects)
 	if err == nil {
 		err = listErr
@@ -415,8 +415,8 @@ func (a *Bucket) DeletePrefix(prefix string) (deleted int, err error) {
 	return listed - failed, err
 }
 
-// PresignUpload — подписанная ссылка на загрузку (PUT). ttl <= 0 — максимум
-// подписи (7 дней)
+// PresignUpload returns a signed upload link (PUT). ttl <= 0 means the maximum
+// signature lifetime (7 days)
 func (a *Bucket) PresignUpload(key string, ttl time.Duration) (link string, err error) {
 	err = a.err
 	if err != nil {
@@ -440,8 +440,8 @@ func (a *Bucket) PresignUpload(key string, ttl time.Duration) (link string, err 
 	return u.String(), nil
 }
 
-// PresignRead — подписанная ссылка на чтение объекта. ttl <= 0 — максимум
-// подписи (7 дней)
+// PresignRead returns a signed link to read an object. ttl <= 0 means the maximum
+// signature lifetime (7 days)
 func (a *Bucket) PresignRead(key string, ttl time.Duration) (link string, err error) {
 	err = a.err
 	if err != nil {
@@ -465,8 +465,8 @@ func (a *Bucket) PresignRead(key string, ttl time.Duration) (link string, err er
 	return u.String(), nil
 }
 
-// Ping — доступ к своему бакету. ListBuckets не годится: ключ r2,
-// выданный на один бакет, список бакетов аккаунта не видит
+// Ping checks access to its own bucket. ListBuckets does not fit: an r2 key
+// issued for one bucket cannot see the account bucket list
 func (a *Bucket) Ping() (err error) {
 	err = a.err
 	if err != nil {
@@ -488,9 +488,9 @@ func (a *Bucket) Ping() (err error) {
 	return nil
 }
 
-// SetCORS — правило CORS бакета: браузеру с origins разрешены methods (по
-// умолчанию PUT, GET, HEAD) с любыми заголовками, в ответе виден ETag.
-// Заменяет всю конфигурацию CORS бакета
+// SetCORS sets the bucket CORS rule: browsers from origins may use methods (by
+// default PUT, GET, HEAD) with any headers, ETag is visible in the response.
+// Replaces the whole bucket CORS configuration
 func (a *Bucket) SetCORS(origins []string, methods ...string) (err error) {
 	err = a.err
 	if err != nil {
@@ -518,13 +518,13 @@ func (a *Bucket) SetCORS(origins []string, methods ...string) (err error) {
 	return a.conn.SetBucketCors(c, a.creds.Bucket, cors.NewConfig([]cors.Rule{rule}))
 }
 
-// context — таймаут одного запроса из Creds.Timeout
+// context returns a context with the single request timeout from Creds.Timeout
 func (a *Bucket) context() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), a.creds.Timeout)
 }
 
-// prefix — префикс ключа: без "*" в конце, но завершающий "/" сохраняется
-// — "v1/dir/" не должен задеть v1/dir2
+// prefix returns the key prefix: without a trailing "*", but a trailing "/" is kept
+// so "v1/dir/" does not touch v1/dir2
 func (a *Bucket) prefix(prefix string) string {
 	prefix = strings.TrimRight(strings.TrimSpace(prefix), "*")
 	dir := strings.HasSuffix(prefix, "/") || strings.HasSuffix(prefix, "\\")
@@ -537,7 +537,7 @@ func (a *Bucket) prefix(prefix string) string {
 	return prefix
 }
 
-// ttl — срок подписи s3 v4: от секунды до 7 дней, <= 0 — максимум
+// ttl returns the s3 v4 signature lifetime: from a second to 7 days, <= 0 means the maximum
 func (a *Bucket) ttl(ttl time.Duration) time.Duration {
 	switch {
 	case ttl <= 0:
@@ -551,8 +551,8 @@ func (a *Bucket) ttl(ttl time.Duration) time.Duration {
 	return ttl
 }
 
-// listTo — ключи с префиксом в канал objects (закрывает его в конце);
-// listed — сколько отдано, listErr — ошибка листинга
+// listTo sends keys with the prefix to the objects channel (closes it at the end);
+// listed is how many were sent, listErr is the listing error
 func (a *Bucket) listTo(ctx context.Context, prefix string, objects chan<- minio.ObjectInfo, listed *int, listErr *error) {
 	defer close(objects)
 
@@ -572,8 +572,8 @@ func (a *Bucket) listTo(ctx context.Context, prefix string, objects chan<- minio
 	}
 }
 
-// remove — DeleteObjects по каналу ключей; failed — сколько ключей не
-// удалось удалить, err — первая из ошибок
+// remove runs DeleteObjects over the key channel; failed is how many keys could not
+// be deleted, err is the first error
 func (a *Bucket) remove(ctx context.Context, objects <-chan minio.ObjectInfo) (failed int, err error) {
 	for e := range a.conn.RemoveObjects(ctx, a.creds.Bucket, objects, minio.RemoveObjectsOptions{}) {
 		if e.Err == nil {
@@ -589,7 +589,7 @@ func (a *Bucket) remove(ctx context.Context, objects <-chan minio.ObjectInfo) (f
 	return
 }
 
-// file — File из ответа s3
+// file builds a File from an s3 response
 func (a *Bucket) file(o minio.ObjectInfo) File {
 	return File{
 		Path:        o.Key,

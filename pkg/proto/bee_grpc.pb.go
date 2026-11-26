@@ -29,16 +29,17 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// Bee — один вызов = одна job. Job и Result несут json публичных типов
-// github.com/angels-you/bee/pkg/types (тот же json, что у http и nats):
+// Bee: one call = one job. Job and Result carry json of the public types
+// github.com/angels-you/bee/pkg/types (the same json as http and nats):
 //
 //	Audio   audio.Job    -> audio.Result
 //	Stream  video.Stream -> video.Result
 //	Video   video.Video  -> video.Result
 //	Images  images.Job   -> images.Result
 //
-// Упавшая job — статус gRPC: код bee в сообщении ("<CODE>: <message>") и
-// в trailers bee-error-code / bee-retryable. Токен — metadata
+// A failed job is a gRPC status: the bee code in the message
+// ("<CODE>: <message>") and in the bee-error-code / bee-retryable trailers.
+// The token is the metadata
 // "authorization: Bearer <BEE_TOKEN>".
 type BeeClient interface {
 	Audio(ctx context.Context, in *Job, opts ...grpc.CallOption) (*Result, error)
@@ -99,16 +100,17 @@ func (c *beeClient) Images(ctx context.Context, in *Job, opts ...grpc.CallOption
 // All implementations must embed UnimplementedBeeServer
 // for forward compatibility.
 //
-// Bee — один вызов = одна job. Job и Result несут json публичных типов
-// github.com/angels-you/bee/pkg/types (тот же json, что у http и nats):
+// Bee: one call = one job. Job and Result carry json of the public types
+// github.com/angels-you/bee/pkg/types (the same json as http and nats):
 //
 //	Audio   audio.Job    -> audio.Result
 //	Stream  video.Stream -> video.Result
 //	Video   video.Video  -> video.Result
 //	Images  images.Job   -> images.Result
 //
-// Упавшая job — статус gRPC: код bee в сообщении ("<CODE>: <message>") и
-// в trailers bee-error-code / bee-retryable. Токен — metadata
+// A failed job is a gRPC status: the bee code in the message
+// ("<CODE>: <message>") and in the bee-error-code / bee-retryable trailers.
+// The token is the metadata
 // "authorization: Bearer <BEE_TOKEN>".
 type BeeServer interface {
 	Audio(context.Context, *Job) (*Result, error)

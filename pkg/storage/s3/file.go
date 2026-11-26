@@ -6,7 +6,7 @@ import (
 	"github.com/minio/minio-go/v7"
 )
 
-// File — объект бакета без тела
+// File is a bucket object without a body
 type File struct {
 	Path        string
 	Size        int64
@@ -15,5 +15,5 @@ type File struct {
 	Modified    time.Time
 }
 
-// Meta — заголовки объекта при загрузке: ContentType, CacheControl и т.д.
+// Meta holds object headers on upload: ContentType, CacheControl etc.
 type Meta = minio.PutObjectOptions

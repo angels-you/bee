@@ -8,14 +8,14 @@ import (
 	"time"
 )
 
-// fixture — env теста: перед каждым тестом все BEE_* убираются, после
-// возвращаются как были
+// fixture is the test env: all BEE_* are removed before each test and
+// restored afterwards
 type fixture struct {
 	t     *testing.T
 	saved map[string]string
 }
 
-// init — чистый env без BEE_*
+// init clears env of BEE_*
 func (a *fixture) init(t *testing.T) {
 	a.t = t
 	a.saved = map[string]string{}
@@ -31,7 +31,7 @@ func (a *fixture) init(t *testing.T) {
 	t.Cleanup(a.restore)
 }
 
-// restore — убрать BEE_* теста (в том числе из .env) и вернуть прежние
+// restore removes the test BEE_* (including those from .env) and brings back the previous ones
 func (a *fixture) restore() {
 	for _, kv := range os.Environ() {
 		key, _, _ := strings.Cut(kv, "=")
@@ -45,14 +45,14 @@ func (a *fixture) restore() {
 	}
 }
 
-// set — ключи env теста
+// set sets the test env keys
 func (a *fixture) set(kv ...string) {
 	for i := 0; i+1 < len(kv); i += 2 {
 		a.t.Setenv(kv[i], kv[i+1])
 	}
 }
 
-// minimal — только обязательное: local хранилище и http
+// minimal returns only the required keys: local storage and http
 func (a *fixture) minimal() {
 	a.set(
 		"BEE_STORAGE", "local",
@@ -62,7 +62,7 @@ func (a *fixture) minimal() {
 	)
 }
 
-// TestDefaults — без необязательных ключей всё берётся из defaults
+// TestDefaults checks that without optional keys everything comes from defaults
 func TestDefaults(t *testing.T) {
 	f := fixture{}
 	f.init(t)
@@ -98,14 +98,14 @@ func TestDefaults(t *testing.T) {
 		t.Error("s3 must be https by default")
 	}
 
-	// хранилище открывается
+	// storage opens
 	st, err := c.Storage.Open()
 	if err != nil || st == nil {
 		t.Errorf("open local: %v", err)
 	}
 }
 
-// TestOverride — env меняет дефолты, в том числе на ноль и false
+// TestOverride checks that env overrides defaults, including to zero and false
 func TestOverride(t *testing.T) {
 	f := fixture{}
 	f.init(t)
@@ -143,8 +143,8 @@ func TestOverride(t *testing.T) {
 	}
 }
 
-// TestRequired — без хранилища и транспорта bee не стартует, и ошибка
-// называет оба
+// TestRequired checks that bee does not start without storage and transport, and the error
+// names both
 func TestRequired(t *testing.T) {
 	f := fixture{}
 	f.init(t)
@@ -159,7 +159,7 @@ func TestRequired(t *testing.T) {
 		t.Errorf("no transport error: %v", err)
 	}
 
-	// s3 требует только свои ключи
+	// s3 requires only its own keys
 	f.set(
 		"BEE_STORAGE", "s3",
 		"BEE_S3_PROVIDER", "nope",
@@ -180,7 +180,7 @@ func TestRequired(t *testing.T) {
 	}
 }
 
-// TestInvalid — значения вне пределов и неразбираемые называются все
+// TestInvalid checks that all out-of-range and unparsable values are named
 func TestInvalid(t *testing.T) {
 	f := fixture{}
 	f.init(t)
@@ -214,7 +214,7 @@ func TestInvalid(t *testing.T) {
 		}
 	}
 
-	// не число
+	// not a number
 	f.set("BEE_CONCURRENCY", "many")
 
 	_, err = Load()
@@ -223,8 +223,8 @@ func TestInvalid(t *testing.T) {
 	}
 }
 
-// TestEnvFile — cmd/.env совпадает с defaults: все ключи пример
-// показывает с их дефолтами
+// TestEnvFile checks that cmd/.env matches defaults: the example shows every key
+// with its default
 func TestEnvFile(t *testing.T) {
 	f := fixture{}
 	f.init(t)
@@ -234,7 +234,7 @@ func TestEnvFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// то, что пример задаёт сверх дефолтов
+	// what the example sets beyond the defaults
 	want := &Config{}
 	want.defaults()
 	want.Storage.Kind = "local"
@@ -242,7 +242,7 @@ func TestEnvFile(t *testing.T) {
 	want.HTTP.Addr = ":8080"
 	want.Token = "change-me"
 
-	// пустой список из файла и nil из defaults — одно и то же
+	// an empty list from the file and nil from defaults are the same
 	if len(c.SourceHosts) == 0 {
 		c.SourceHosts = nil
 	}
@@ -252,7 +252,7 @@ func TestEnvFile(t *testing.T) {
 	}
 }
 
-// TestSourceHostAllowed — точный хост и поддомены; пустой список — любой
+// TestSourceHostAllowed checks exact host and subdomains; an empty list allows any
 func TestSourceHostAllowed(t *testing.T) {
 	c := &Config{}
 

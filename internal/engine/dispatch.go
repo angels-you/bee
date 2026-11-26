@@ -11,10 +11,10 @@ import (
 	"github.com/angels-you/bee/pkg/types/video"
 )
 
-// Do — job типа kind в json, результат в json: один вход для всех
-// транспортов (http, grpc, nats). Упавшая job — json результата с error
-// и тот же *code.Error. Не json job — INVALID_JOB с id, если его удалось
-// прочитать
+// Do runs a job of type kind from json and returns the result as json: one entry
+// for all transports (http, grpc, nats). A failed job returns the result json
+// with error and the same *code.Error. Input that is not a job gives INVALID_JOB
+// with the id, if it could be read
 func (a *Engine) Do(ctx context.Context, kind proto.Kind, data []byte) ([]byte, error) {
 	switch kind {
 	case proto.Audio:
@@ -30,7 +30,7 @@ func (a *Engine) Do(ctx context.Context, kind proto.Kind, data []byte) ([]byte, 
 	return a.malformed(data, "unknown job type "+string(kind))
 }
 
-// doAudio — аудио job из json
+// doAudio runs an audio job from json
 func (a *Engine) doAudio(ctx context.Context, data []byte) ([]byte, error) {
 	var j audio.Job
 	err := json.Unmarshal(data, &j)
@@ -42,7 +42,7 @@ func (a *Engine) doAudio(ctx context.Context, data []byte) ([]byte, error) {
 	return a.reply(res, err)
 }
 
-// doStream — HLS job из json
+// doStream runs an HLS job from json
 func (a *Engine) doStream(ctx context.Context, data []byte) ([]byte, error) {
 	var j video.Stream
 	err := json.Unmarshal(data, &j)
@@ -54,7 +54,7 @@ func (a *Engine) doStream(ctx context.Context, data []byte) ([]byte, error) {
 	return a.reply(res, err)
 }
 
-// doVideo — MP4 job из json
+// doVideo runs an MP4 job from json
 func (a *Engine) doVideo(ctx context.Context, data []byte) ([]byte, error) {
 	var j video.Video
 	err := json.Unmarshal(data, &j)
@@ -66,7 +66,7 @@ func (a *Engine) doVideo(ctx context.Context, data []byte) ([]byte, error) {
 	return a.reply(res, err)
 }
 
-// doImages — job картинок из json
+// doImages runs an image job from json
 func (a *Engine) doImages(ctx context.Context, data []byte) ([]byte, error) {
 	var j images.Job
 	err := json.Unmarshal(data, &j)
@@ -78,7 +78,7 @@ func (a *Engine) doImages(ctx context.Context, data []byte) ([]byte, error) {
 	return a.reply(res, err)
 }
 
-// reply — результат в json и ошибка job как есть
+// reply returns the result as json and the job error as is
 func (a *Engine) reply(res any, err error) ([]byte, error) {
 	data, jerr := json.Marshal(res)
 	if jerr != nil {
@@ -89,7 +89,7 @@ func (a *Engine) reply(res any, err error) ([]byte, error) {
 	return data, err
 }
 
-// malformed — не job: результат с id (если читается) и INVALID_JOB
+// malformed handles a non-job: a result with the id (if readable) and INVALID_JOB
 func (a *Engine) malformed(data []byte, message string) ([]byte, error) {
 	var head struct {
 		ID string `json:"id"`

@@ -1,5 +1,5 @@
-// Package s3 — один бакет любого s3 провайдера (minio-go) и хранилище bee
-// поверх него (S3). Список провайдеров с endpoint и регионами — в
+// Package s3 is one bucket of any s3 provider (minio-go) and the bee storage
+// on top of it (S3). The list of providers with endpoints and regions is in
 // provider
 package s3
 
@@ -11,32 +11,32 @@ import (
 	"github.com/angels-you/bee/pkg/storage/s3/provider"
 )
 
-// Creds — доступ к одному бакету. У провайдеров без шаблона endpoint
-// (idrive, ceph) Endpoint обязателен
+// Creds is access to one bucket. Providers without an endpoint template
+// (idrive, ceph) require Endpoint
 type Creds struct {
-	Secure   bool              `json:"secure"`             // https; у облачных провайдеров всегда, настройка только для своих (minio, ceph)
+	Secure   bool              `json:"secure"`             // https; always for cloud providers, the setting is only for self-hosted (minio, ceph)
 	Provider provider.Provider `json:"provider"`           // provider.Hetzner, Cloudflare, Backblaze...
-	Endpoint string            `json:"endpoint,omitempty"` // hel1.your-objectstorage.com; пусто — по шаблону провайдера
-	Region   string            `json:"region,omitempty"`   // hel1, us-west-004; пусто — по провайдеру, r2 — всегда auto
+	Endpoint string            `json:"endpoint,omitempty"` // hel1.your-objectstorage.com; empty means the provider template
+	Region   string            `json:"region,omitempty"`   // hel1, us-west-004; empty means the provider default, r2 is always auto
 	Account  string            `json:"account,omitempty"`  // cloudflare account id
 	Key      string            `json:"key"`                // access key / b2 keyID
 	Secret   string            `json:"secret"`             // secret key / b2 applicationKey
 	Bucket   string            `json:"bucket"`             // my-bucket
-	Domain   string            `json:"domain,omitempty"`   // https://cdn.example.com, публичные ссылки; пусто — Upload возвращает ключ
-	Timeout  time.Duration     `json:"timeout,omitempty"`  // один запрос, по умолчанию 10s
+	Domain   string            `json:"domain,omitempty"`   // https://cdn.example.com, public links; empty means Upload returns the key
+	Timeout  time.Duration     `json:"timeout,omitempty"`  // one request, 10s by default
 }
 
-// prepare — дефолты провайдера (регион, endpoint, https, таймаут) и
-// проверка
+// prepare applies provider defaults (region, endpoint, https, timeout) and
+// validates
 func (a *Creds) prepare() (err error) {
 
-	// регион: r2 всегда auto
+	// region: r2 is always auto
 	if a.Region == "" || a.Provider == provider.Cloudflare {
 		a.Region = a.Provider.Region()
 	}
 
-	// endpoint по шаблону провайдера: без региона или аккаунта шаблон не
-	// заполнить
+	// endpoint from the provider template: the template cannot be filled without
+	// a region or account
 	template := a.Provider.Endpoint()
 	if a.Endpoint == "" {
 		switch {
@@ -50,7 +50,7 @@ func (a *Creds) prepare() (err error) {
 		a.Endpoint = replacer.Replace(template)
 	}
 
-	// облачные провайдеры — всегда https
+	// cloud providers always use https
 	if !a.Provider.Hosted() {
 		a.Secure = true
 	}

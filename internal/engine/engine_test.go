@@ -15,20 +15,20 @@ import (
 	"github.com/angels-you/bee/pkg/types/video"
 )
 
-// fixture — стенд одного теста
+// fixture is the bench of one test
 type fixture struct {
 	t     *testing.T
 	bench *testbee.Bench
 }
 
-// init — стенд с движком
+// init sets up the bench with an engine
 func (a *fixture) init(t *testing.T) {
 	a.t = t
 	a.bench = &testbee.Bench{T: t}
 	a.bench.Start()
 }
 
-// codeOf — код ошибки, пусто если это не *code.Error
+// codeOf returns the error code, empty if it is not a *code.Error
 func (a *fixture) codeOf(err error) code.Code {
 	var e *code.Error
 	if errors.As(err, &e) {
@@ -38,21 +38,21 @@ func (a *fixture) codeOf(err error) code.Code {
 	return ""
 }
 
-// has — объект есть в хранилище
+// has reports that the object is in storage
 func (a *fixture) has(key string) bool {
 	_, ok := a.bench.Store.Get(key)
 	return ok
 }
 
-// noSecret — логи без подписи url
+// noSecret checks the logs have no url signature
 func (a *fixture) noSecret() {
 	if strings.Contains(a.bench.Logs.String(), "secretsignature") {
 		a.t.Error("the presigned signature is in the logs")
 	}
 }
 
-// TestAudio — HLS двух вариантов, waveform и json, master последним;
-// параметры job поверх дефолтов
+// TestAudio checks HLS with two variants, waveform and json, master last;
+// job parameters over the defaults
 func TestAudio(t *testing.T) {
 	f := fixture{}
 	f.init(t)
@@ -67,7 +67,7 @@ func TestAudio(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// результат
+	// result
 	switch {
 	case res.ID != "a1":
 		t.Errorf("id %q", res.ID)
@@ -89,7 +89,7 @@ func TestAudio(t *testing.T) {
 		t.Error("no loudness")
 	}
 
-	// объекты
+	// objects
 	for _, key := range []string{"tracks/1/master.m3u8", "tracks/1/64/index.m3u8", "tracks/1/128/init.mp4", "tracks/1/wave.json", "tracks/1/meta.json", "tracks/1/analysis.json"} {
 		if !f.has(key) {
 			t.Errorf("%s is missing: %v", key, f.bench.Store.Keys())
@@ -101,7 +101,7 @@ func TestAudio(t *testing.T) {
 		t.Errorf("master content type %q", master.ContentType)
 	}
 
-	// параметры job: один вариант, своя длина waveform
+	// job parameters: one variant, custom waveform length
 	j = f.bench.Audio("a2", "tracks/2")
 	j.Options.Renditions = []int{96}
 	j.Options.WaveformPoints = 100
@@ -122,8 +122,8 @@ func TestAudio(t *testing.T) {
 	f.noSecret()
 }
 
-// TestAudioEncrypted — сегменты зашифрованы, в media playlist строки ключа
-// с KeyURI job, в master ключа нет
+// TestAudioEncrypted checks that segments are encrypted, media playlists have key lines
+// with the job KeyURI, master has no key
 func TestAudioEncrypted(t *testing.T) {
 	f := fixture{}
 	f.init(t)
@@ -151,14 +151,14 @@ func TestAudioEncrypted(t *testing.T) {
 	}
 }
 
-// TestRerun — повтор той же job отдаёт сохранённый результат, чужая job
-// на тех же ключах — ALREADY_EXISTS
+// TestRerun checks that rerunning the same job returns the saved result, while another job
+// on the same keys gets ALREADY_EXISTS
 func TestRerun(t *testing.T) {
 	f := fixture{}
 	f.init(t)
 	ctx := context.Background()
 
-	// аудио
+	// audio
 	first, err := f.bench.Engine.Audio(ctx, f.bench.Audio("r1", "rerun/a"))
 	if err != nil {
 		t.Fatal(err)
@@ -177,7 +177,7 @@ func TestRerun(t *testing.T) {
 		t.Errorf("other job: %v", err)
 	}
 
-	// видео
+	// video
 	_, err = f.bench.Engine.Video(ctx, f.bench.Video("v1", "rerun/v"))
 	if err != nil {
 		t.Fatal(err)
@@ -194,8 +194,8 @@ func TestRerun(t *testing.T) {
 	}
 }
 
-// TestStream — HLS одного варианта с превью-картинкой, в результате
-// размеры и сегменты
+// TestStream checks HLS with one variant and a preview image, with sizes
+// and segments in the result
 func TestStream(t *testing.T) {
 	f := fixture{}
 	f.init(t)
@@ -231,7 +231,7 @@ func TestStream(t *testing.T) {
 	f.noSecret()
 }
 
-// TestStreamEncrypted — два варианта, master и ключи в media playlist
+// TestStreamEncrypted checks two variants, master and keys in media playlists
 func TestStreamEncrypted(t *testing.T) {
 	f := fixture{}
 	f.init(t)
@@ -257,7 +257,7 @@ func TestStreamEncrypted(t *testing.T) {
 	}
 }
 
-// TestVideo — один MP4
+// TestVideo checks a single MP4
 func TestVideo(t *testing.T) {
 	f := fixture{}
 	f.init(t)
@@ -278,7 +278,7 @@ func TestVideo(t *testing.T) {
 	}
 }
 
-// TestImages — каждый результат с размерами, Content-Type по формату
+// TestImages checks each result with sizes and Content-Type by format
 func TestImages(t *testing.T) {
 	f := fixture{}
 	f.init(t)
@@ -302,7 +302,7 @@ func TestImages(t *testing.T) {
 		t.Errorf("content type %q", small.ContentType)
 	}
 
-	// avif с усилием из job
+	// avif with effort from the job
 	effort := 0
 	j := f.bench.Images("i2", "img/2")
 	j.Tasks = []images.Task{{ID: "a", Output: "img/2/a.avif", Profile: images.Profile{Format: images.Avif, Quality: 50, MaxWidth: 64, Effort: &effort}}}
@@ -311,7 +311,7 @@ func TestImages(t *testing.T) {
 		t.Errorf("avif: %v", err)
 	}
 
-	// лимит коробки из конфига
+	// box limit from the config
 	j = f.bench.Images("i3", "img/3")
 	j.Tasks[0].Profile.MaxWidth = 9000
 	_, err = f.bench.Engine.Images(context.Background(), j)
@@ -322,13 +322,13 @@ func TestImages(t *testing.T) {
 	f.noSecret()
 }
 
-// TestSourceErrors — ошибки оригинала с кодами и без подписи в логах
+// TestSourceErrors checks source errors with codes and no signature in logs
 func TestSourceErrors(t *testing.T) {
 	f := fixture{}
 	f.init(t)
 	ctx := context.Background()
 
-	// нет файла
+	// no file
 	j := f.bench.Images("x1", "err/1")
 	j.Input = f.bench.URL("missing.tif")
 	_, err := f.bench.Engine.Images(ctx, j)
@@ -336,7 +336,7 @@ func TestSourceErrors(t *testing.T) {
 		t.Errorf("missing source: %v", err)
 	}
 
-	// не аудио
+	// not audio
 	a := f.bench.Audio("x2", "err/2")
 	a.Input = f.bench.URL("photo.tif")
 	_, err = f.bench.Engine.Audio(ctx, a)
@@ -344,7 +344,7 @@ func TestSourceErrors(t *testing.T) {
 		t.Errorf("not audio: %v", err)
 	}
 
-	// не видео
+	// not video
 	v := f.bench.Video("x3", "err/3")
 	v.Input = f.bench.URL("song.wav")
 	_, err = f.bench.Engine.Video(ctx, v)
@@ -352,7 +352,7 @@ func TestSourceErrors(t *testing.T) {
 		t.Errorf("not video: %v", err)
 	}
 
-	// слишком длинное аудио
+	// audio too long
 	f.bench.Config.Audio.MaxDuration = time.Second
 	f.bench.Restart()
 	_, err = f.bench.Engine.Audio(ctx, f.bench.Audio("x4", "err/4"))
@@ -360,7 +360,7 @@ func TestSourceErrors(t *testing.T) {
 		t.Errorf("too long: %v", err)
 	}
 
-	// плохая job до слота
+	// bad job before the slot
 	_, err = f.bench.Engine.Audio(ctx, f.bench.Audio("", "err/5"))
 	if f.codeOf(err) != code.InvalidJob {
 		t.Errorf("no id: %v", err)
@@ -369,8 +369,8 @@ func TestSourceErrors(t *testing.T) {
 	f.noSecret()
 }
 
-// TestUploadFailure — упавшая загрузка не публикует вход; повтор
-// проходит
+// TestUploadFailure checks that a failed upload does not publish the entry; a retry
+// succeeds
 func TestUploadFailure(t *testing.T) {
 	f := fixture{}
 	f.init(t)
@@ -392,7 +392,7 @@ func TestUploadFailure(t *testing.T) {
 	}
 }
 
-// TestBusy — без свободного слота и без ожидания — временная ошибка
+// TestBusy checks that with no free slot and no waiting the error is temporary
 func TestBusy(t *testing.T) {
 	f := fixture{}
 	f.init(t)
@@ -400,7 +400,7 @@ func TestBusy(t *testing.T) {
 	f.bench.Config.Concurrency = 1
 	f.bench.Restart()
 
-	// первая job держит слот на скачивании
+	// the first job holds the slot while downloading
 	held := f.bench.Images("b1", "busy/1")
 	held.Input = f.bench.Server.URL + "/hold/photo.tif"
 	done := make(chan error, 1)
@@ -409,7 +409,7 @@ func TestBusy(t *testing.T) {
 		done <- err
 	}()
 
-	// ждём, пока первая займёт слот
+	// wait until the first one takes the slot
 	for range 100 {
 		if f.bench.Sources.Count("photo.tif") > 0 {
 			break
@@ -429,7 +429,7 @@ func TestBusy(t *testing.T) {
 	}
 }
 
-// TestCancel — отменённая job — временная ошибка
+// TestCancel checks that a canceled job is a temporary error
 func TestCancel(t *testing.T) {
 	f := fixture{}
 	f.init(t)
@@ -449,7 +449,7 @@ func TestCancel(t *testing.T) {
 	}
 }
 
-// TestMetrics — счётчики по типам и кодам в формате Prometheus
+// TestMetrics checks counters by type and code in Prometheus format
 func TestMetrics(t *testing.T) {
 	f := fixture{}
 	f.init(t)
@@ -488,7 +488,7 @@ func TestMetrics(t *testing.T) {
 	}
 }
 
-// TestResultJSON — результат упавшей job сериализуется без причины
+// TestResultJSON checks that the result of a failed job serializes without the cause
 func TestResultJSON(t *testing.T) {
 	f := fixture{}
 	f.init(t)

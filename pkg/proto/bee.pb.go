@@ -21,7 +21,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Job — json job своего типа
+// Job is the json of a job of its type
 type Job struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Json          []byte                 `protobuf:"bytes,1,opt,name=json,proto3" json:"json,omitempty"`
@@ -66,7 +66,7 @@ func (x *Job) GetJson() []byte {
 	return nil
 }
 
-// Result — json результата своего типа
+// Result is the json of a result of its type
 type Result struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Json          []byte                 `protobuf:"bytes,1,opt,name=json,proto3" json:"json,omitempty"`

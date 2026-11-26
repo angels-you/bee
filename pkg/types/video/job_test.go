@@ -165,8 +165,8 @@ func TestJSON(t *testing.T) {
 	}
 }
 
-// TestParams — параметры обработки в job: пустые не попадают в json и
-// означают дефолт bee
+// TestParams checks job processing parameters: empty ones stay out of
+// json and mean the bee default
 func TestParams(t *testing.T) {
 	js, err := json.Marshal(Options{Normalize: true})
 	if err != nil {

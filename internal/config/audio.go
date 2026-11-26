@@ -6,31 +6,31 @@ import (
 	"time"
 )
 
-// Audio — лимиты аудио job и дефолты для пустых полей audio.Options
+// Audio holds audio job limits and defaults for empty audio.Options fields
 type Audio struct {
 
-	// лимиты сервера: job их не меняет
-	Timeout     time.Duration `env:"TIMEOUT"`       // одна job, от скачивания до загрузки
-	MaxSourceMB int64         `env:"MAX_SOURCE_MB"` // самый большой оригинал, MiB
-	MinDuration time.Duration `env:"MIN_DURATION"`  // самый короткий оригинал
-	MaxDuration time.Duration `env:"MAX_DURATION"`  // самый длинный оригинал
+	// server limits: a job cannot change them
+	Timeout     time.Duration `env:"TIMEOUT"`       // one job, from download to upload
+	MaxSourceMB int64         `env:"MAX_SOURCE_MB"` // largest original, MiB
+	MinDuration time.Duration `env:"MIN_DURATION"`  // shortest original
+	MaxDuration time.Duration `env:"MAX_DURATION"`  // longest original
 
-	// дефолты обработки: пустое поле job = это значение
-	LUFS           float64 `env:"LUFS"`            // цель громкости, LUFS: ниже 0 и выше -70
-	TruePeak       float64 `env:"TRUE_PEAK"`       // потолок true peak, dBTP: не выше 0
-	Renditions     []int   `env:"RENDITIONS"`      // битрейты AAC вариантов HLS, kbit/s, в порядке master playlist
-	SampleRate     int     `env:"SAMPLE_RATE"`     // Hz каждого варианта
-	Channels       int     `env:"CHANNELS"`        // каналов каждого варианта
-	Segment        int     `env:"SEGMENT"`         // длина сегмента HLS, секунд
-	WaveformPPS    int     `env:"WAVEFORM_PPS"`    // точек в секунду в waveform json
-	WaveformPoints int     `env:"WAVEFORM_POINTS"` // точек в Result.Waveform
-	Analysis       bool    `env:"ANALYSIS"`        // диагностика качества (astats, silencedetect)
-	Fingerprint    bool    `env:"FINGERPRINT"`     // chromaprint через fpcalc, только в Result
-	SilenceDB      float64 `env:"SILENCE_DB"`      // порог тишины, dB ниже 0
-	SilenceSec     float64 `env:"SILENCE_SEC"`     // самая короткая тишина в отчёте, секунд
+	// processing defaults: an empty job field = this value
+	LUFS           float64 `env:"LUFS"`            // loudness target, LUFS: below 0 and above -70
+	TruePeak       float64 `env:"TRUE_PEAK"`       // true peak ceiling, dBTP: not above 0
+	Renditions     []int   `env:"RENDITIONS"`      // AAC bitrates of the HLS renditions, kbit/s, in master playlist order
+	SampleRate     int     `env:"SAMPLE_RATE"`     // Hz of each rendition
+	Channels       int     `env:"CHANNELS"`        // channels of each rendition
+	Segment        int     `env:"SEGMENT"`         // HLS segment length, seconds
+	WaveformPPS    int     `env:"WAVEFORM_PPS"`    // points per second in the waveform json
+	WaveformPoints int     `env:"WAVEFORM_POINTS"` // points in Result.Waveform
+	Analysis       bool    `env:"ANALYSIS"`        // quality diagnostics (astats, silencedetect)
+	Fingerprint    bool    `env:"FINGERPRINT"`     // chromaprint via fpcalc, only in Result
+	SilenceDB      float64 `env:"SILENCE_DB"`      // silence threshold, dB below 0
+	SilenceSec     float64 `env:"SILENCE_SEC"`     // shortest silence in the report, seconds
 }
 
-// defaults — проверенные в работе значения
+// defaults are values proven in production
 func (a *Audio) defaults() {
 	a.Timeout = 5 * time.Minute
 	a.MaxSourceMB = 500
@@ -51,10 +51,10 @@ func (a *Audio) defaults() {
 	a.SilenceSec = 2
 }
 
-// validate — все поля в своих пределах
+// validate checks that all fields are within their limits
 func (a *Audio) validate(download time.Duration) (errs []error) {
 
-	// лимиты
+	// limits
 	if a.Timeout <= 0 {
 		errs = append(errs, errors.New("config: BEE_AUDIO_TIMEOUT must be positive"))
 	}
@@ -75,7 +75,7 @@ func (a *Audio) validate(download time.Duration) (errs []error) {
 		errs = append(errs, errors.New("config: BEE_AUDIO_MAX_DURATION must be above BEE_AUDIO_MIN_DURATION"))
 	}
 
-	// громкость
+	// loudness
 	if !(a.LUFS < 0 && a.LUFS > -70) {
 		errs = append(errs, errors.New("config: BEE_AUDIO_LUFS must be below 0 and above -70"))
 	}
@@ -84,7 +84,7 @@ func (a *Audio) validate(download time.Duration) (errs []error) {
 		errs = append(errs, errors.New("config: BEE_AUDIO_TRUE_PEAK must be at most 0"))
 	}
 
-	// варианты: папка варианта — его битрейт, поэтому разные и положительные
+	// renditions: a rendition folder is its bitrate, so they must be distinct and positive
 	if len(a.Renditions) == 0 {
 		errs = append(errs, errors.New("config: BEE_AUDIO_RENDITIONS is required"))
 	}
@@ -100,7 +100,7 @@ func (a *Audio) validate(download time.Duration) (errs []error) {
 		seen[kbit] = true
 	}
 
-	// формат
+	// format
 	if a.SampleRate <= 0 {
 		errs = append(errs, errors.New("config: BEE_AUDIO_SAMPLE_RATE must be positive"))
 	}
@@ -122,7 +122,7 @@ func (a *Audio) validate(download time.Duration) (errs []error) {
 		errs = append(errs, errors.New("config: BEE_AUDIO_WAVEFORM_POINTS must be positive"))
 	}
 
-	// тишина
+	// silence
 	if a.SilenceDB >= 0 {
 		errs = append(errs, errors.New("config: BEE_AUDIO_SILENCE_DB must be below 0"))
 	}

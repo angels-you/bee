@@ -13,24 +13,24 @@ import (
 	"github.com/angels-you/bee/pkg/types/code"
 )
 
-// upload — один объект для публикации: локальный файл или байты из памяти
+// upload is one object to publish: a local file or bytes in memory
 type upload struct {
 	key     string
-	file    string       // локальный файл; пусто, если задан data
-	data    []byte       // сделано в памяти (playlist, json)
-	encrypt *encrypt.HLS // сегмент HLS job с ключом: шифруется в памяти прямо перед Put
-	track   *track       // вариант HLS, чей это init или сегмент; nil у остальных
-	mime    string       // Content-Type; пусто — по расширению ключа
+	file    string       // local file; empty if data is set
+	data    []byte       // made in memory (playlist, json)
+	encrypt *encrypt.HLS // HLS segment of a job with a key: encrypted in memory right before Put
+	track   *track       // HLS variant this init or segment belongs to; nil for the rest
+	mime    string       // Content-Type; empty means by key extension
 }
 
-// track — опубликованные файлы одного варианта HLS: размеры после
-// шифрования и IV каждого зашифрованного сегмента, по имени файла
+// track holds the published files of one HLS variant: sizes after
+// encryption and the IV of each encrypted segment, by file name
 type track struct {
 	sizes map[string]int64
 	ivs   map[string][]byte
 }
 
-// newTrack — пустой вариант
+// newTrack returns an empty variant
 func newTrack() *track {
 	return &track{
 		sizes: map[string]int64{},
@@ -38,8 +38,8 @@ func newTrack() *track {
 	}
 }
 
-// putAll — загрузки одной волны, BEE_UPLOAD_CONCURRENCY одновременно;
-// первая ошибка отменяет остальные
+// putAll runs the uploads of one wave, BEE_UPLOAD_CONCURRENCY at a time;
+// the first error cancels the rest
 func (a *work) putAll(ctx context.Context, list []upload) *code.Error {
 	t := time.Now()
 	defer a.took(&a.uploadMs, t)
@@ -47,7 +47,7 @@ func (a *work) putAll(ctx context.Context, list []upload) *code.Error {
 	wctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// волна
+	// wave
 	a.failed = nil
 	sem := make(chan struct{}, a.engine.cfg.UploadConcurrency)
 	var wg sync.WaitGroup
@@ -57,7 +57,7 @@ func (a *work) putAll(ctx context.Context, list []upload) *code.Error {
 	}
 	wg.Wait()
 
-	// итог волны
+	// wave outcome
 	err := a.failed
 	if err == nil {
 		err = ctx.Err()
@@ -70,8 +70,8 @@ func (a *work) putAll(ctx context.Context, list []upload) *code.Error {
 	return a.storageError(ctx, "upload", err)
 }
 
-// putOne — одна загрузка, когда свободен слот; ошибка записывается один
-// раз и отменяет волну
+// putOne runs one upload when a slot is free; the error is recorded once
+// and cancels the wave
 func (a *work) putOne(ctx context.Context, cancel context.CancelFunc, u upload, sem chan struct{}, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -96,8 +96,8 @@ func (a *work) putOne(ctx context.Context, cancel context.CancelFunc, u upload, 
 	cancel()
 }
 
-// put — один объект с его Content-Type: сегмент job с ключом шифруется в
-// памяти новым IV, байты из памяти как есть, файл — потоком с диска
+// put writes one object with its Content-Type: a job segment with a key is encrypted
+// in memory with a new IV, bytes from memory as is, a file streamed from disk
 func (a *work) put(ctx context.Context, u upload) error {
 	switch {
 	case u.encrypt != nil:
@@ -109,8 +109,8 @@ func (a *work) put(ctx context.Context, u upload) error {
 	return a.putFile(ctx, u)
 }
 
-// putEncrypted — сегмент целиком (сегменты маленькие), зашифрованный
-// AES-128-CBC ключом job и новым случайным IV
+// putEncrypted writes a whole segment (segments are small), encrypted with
+// AES-128-CBC using the job key and a new random IV
 func (a *work) putEncrypted(ctx context.Context, u upload) error {
 	plain, err := os.ReadFile(u.file)
 	if err != nil {
@@ -125,7 +125,7 @@ func (a *work) putEncrypted(ctx context.Context, u upload) error {
 	return a.putBytes(ctx, u, data, iv)
 }
 
-// putBytes — данные записаны; записан их размер (и IV шифрования)
+// putBytes writes the data and records its size (and the encryption IV)
 func (a *work) putBytes(ctx context.Context, u upload, data, iv []byte) error {
 	err := a.engine.storage.Put(ctx, u.key, bytes.NewReader(data), int64(len(data)), u.contentType())
 	if err != nil {
@@ -136,7 +136,7 @@ func (a *work) putBytes(ctx context.Context, u upload, data, iv []byte) error {
 	return nil
 }
 
-// putFile — локальный файл потоком в хранилище; записан его размер
+// putFile streams a local file to storage and records its size
 func (a *work) putFile(ctx context.Context, u upload) error {
 	f, err := os.Open(u.file)
 	if err != nil {
@@ -158,8 +158,8 @@ func (a *work) putFile(ctx context.Context, u upload) error {
 	return nil
 }
 
-// record — опубликованный объект: байты посчитаны; у файла HLS его размер
-// и IV зашифрованного сегмента записаны в вариант под именем файла
+// record accounts a published object: bytes are counted; for an HLS file its size
+// and the IV of the encrypted segment are recorded in the variant under the file name
 func (a *work) record(u upload, size int64, iv []byte) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -176,7 +176,7 @@ func (a *work) record(u upload, size int64, iv []byte) {
 	}
 }
 
-// contentType — Content-Type объекта по расширению ключа
+// contentType returns the object Content-Type by key extension
 func (a upload) contentType() string {
 	if a.mime != "" {
 		return a.mime

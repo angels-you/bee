@@ -8,10 +8,10 @@ import (
 	"github.com/angels-you/bee/pkg/types/code"
 )
 
-// fixture — правильная job, которую тесты портят по одному полю
+// fixture is a valid job that tests break one field at a time
 type fixture struct{}
 
-// job — правильная job со всеми ключами
+// job is a valid job with all keys
 func (a fixture) job() Job {
 	return Job{
 		ID:       "t1",
@@ -23,7 +23,7 @@ func (a fixture) job() Job {
 	}
 }
 
-// TestValidate — правильная job проходит, ключи чистятся
+// TestValidate checks that a valid job passes and keys are cleaned
 func TestValidate(t *testing.T) {
 	f := fixture{}
 	j := f.job()
@@ -36,14 +36,14 @@ func TestValidate(t *testing.T) {
 		t.Errorf("leading slash must be trimmed: %s", j.Output)
 	}
 
-	// только обязательное
+	// required only
 	j = Job{ID: "t2", Input: "https://example.com/a.wav", Output: "a.m3u8"}
 	e = j.Validate()
 	if e != nil {
 		t.Errorf("minimal job refused: %v", e)
 	}
 
-	// с ключом шифрования
+	// with an encryption key
 	j = f.job()
 	j.Key = []byte("0123456789abcdef")
 	j.KeyURI = "skd://1"
@@ -53,7 +53,7 @@ func TestValidate(t *testing.T) {
 	}
 }
 
-// TestRefuse — каждое неверное поле отклоняется своим кодом
+// TestRefuse checks that each invalid field is rejected with its code
 func TestRefuse(t *testing.T) {
 	f := fixture{}
 
@@ -99,8 +99,8 @@ func TestRefuse(t *testing.T) {
 	}
 }
 
-// TestParams — параметры в job: пустые не попадают в json и означают
-// дефолт bee, false у флага отличается от nil
+// TestParams checks job options: empty ones stay out of json and mean the
+// bee default, a false flag differs from nil
 func TestParams(t *testing.T) {
 	js, err := json.Marshal(Options{})
 	if err != nil {
@@ -128,7 +128,7 @@ func TestParams(t *testing.T) {
 	}
 }
 
-// TestResultJSON — у упавшей job ошибка без причины
+// TestResultJSON checks that a failed job has an error without the cause
 func TestResultJSON(t *testing.T) {
 	failed := Result{ID: "t1", Error: code.New(code.InvalidAudio, "silent", nil)}
 

@@ -9,89 +9,88 @@ import (
 	"github.com/angels-you/bee/pkg/types/code"
 )
 
-// Profile — как сделать один результат из оригинала. Пустые параметры
-// обработки (Fit, Effort, MinQuality) берутся из дефолтов bee (env).
-// Brightness, Sharpness и Blur — множители в стиле процентов: 1 = 100 %,
-// 1.5 = 150 %, 0.9 = 90 %; их радиусы — доли длинной стороны результата,
-// поэтому эффект выглядит одинаково на любом размере
+// Profile describes how to make one result from the original. Empty
+// processing parameters (Fit, Effort, MinQuality) come from the bee
+// defaults (env). Brightness, Sharpness and Blur are percent-style
+// multipliers: 1 = 100 %, 1.5 = 150 %, 0.9 = 90 %; their radii are fractions
+// of the result's long side, so the effect looks the same at any size
 type Profile struct {
-	Format Format `json:"format"`        // результат: "jpg", "png", "webp" или "avif"
-	Fit    Fit    `json:"fit,omitempty"` // "inside", "cover", "contain" или "fill", см. Geometry; пусто — inside
+	Format Format `json:"format"`        // result: "jpg", "png", "webp" or "avif"
+	Fit    Fit    `json:"fit,omitempty"` // "inside", "cover", "contain" or "fill", see Geometry; empty — inside
 
-	// Quality 1..100 для jpg и lossy webp / avif; для png и lossless не
-	// нужен (может быть 0)
+	// Quality 1..100 for jpg and lossy webp / avif; not needed for png and
+	// lossless (may be 0)
 	Quality   int  `json:"quality"`
-	MaxWidth  int  `json:"max_width"`  // ширина коробки, px; 0 — без ограничения (только inside)
-	MaxHeight int  `json:"max_height"` // высота коробки, px; 0 — без ограничения (только inside)
-	Center    bool `json:"center"`     // обрезка cover: true — центр, false — самая интересная область (vips attention)
+	MaxWidth  int  `json:"max_width"`  // box width, px; 0 — unlimited (inside only)
+	MaxHeight int  `json:"max_height"` // box height, px; 0 — unlimited (inside only)
+	Center    bool `json:"center"`     // cover crop: true — center, false — the most interesting area (vips attention)
 
-	// BackgroundColor — #rgb, #rrggbb или #rrggbbaa. Фон contain и то, на
-	// что jpg кладёт прозрачность. Пусто: contain — прозрачный фон (чёрный
-	// в jpg), jpg — на чёрный
+	// BackgroundColor is #rgb, #rrggbb or #rrggbbaa. The contain background
+	// and what jpg flattens transparency onto. Empty: contain — transparent
+	// background (black in jpg), jpg — onto black
 	BackgroundColor string `json:"background_color"`
 
-	// Blur — сила гауссова размытия: 0 — нет, 1 = 100 %, 0.5 = 50 %; до
-	// MaxBlur
+	// Blur is the gaussian blur strength: 0 — none, 1 = 100 %, 0.5 = 50 %;
+	// up to MaxBlur
 	Blur float64 `json:"blur"`
 
-	// Brightness — множитель цветовых каналов, альфа не меняется: 1 — без
-	// изменений, 1.5 = 150 %; 0 (не задано) — без изменений; до
-	// MaxBrightness
+	// Brightness is the color channel multiplier, alpha unchanged: 1 — no
+	// change, 1.5 = 150 %; 0 (not set) — no change; up to MaxBrightness
 	Brightness float64 `json:"brightness"`
 
-	// Sharpness — unsharp mask: 1 — без изменений, 1.5 — мелкие детали на
-	// 150 % (резче), 0.9 — на 90 % (мягче); 0 (не задано) — без изменений;
-	// до MaxSharpness
+	// Sharpness is an unsharp mask: 1 — no change, 1.5 — fine detail at
+	// 150 % (sharper), 0.9 — at 90 % (softer); 0 (not set) — no change; up
+	// to MaxSharpness
 	Sharpness float64 `json:"sharpness"`
 
-	Upscale       bool `json:"upscale"`        // оригинал можно увеличить до коробки
-	MaxBytes      int  `json:"max_bytes"`      // лимит размера результата, байт, 0 — нет; lossy качество снижается до MinQuality
-	Thumbhash     bool `json:"thumbhash"`      // TaskResult.Thumbhash результата
-	Lossless      bool `json:"lossless"`       // lossless webp / avif; png всегда lossless, jpg никогда
-	DominantColor bool `json:"dominant_color"` // TaskResult.DominantColor результата
-	PaletteColors int  `json:"palette_colors"` // TaskResult.Palette результата, 0..MaxPalette цветов
-	AverageColor  bool `json:"average_color"`  // TaskResult.AverageColor результата
+	Upscale       bool `json:"upscale"`        // the original may be enlarged up to the box
+	MaxBytes      int  `json:"max_bytes"`      // result size limit, bytes, 0 — none; lossy quality drops down to MinQuality
+	Thumbhash     bool `json:"thumbhash"`      // TaskResult.Thumbhash of the result
+	Lossless      bool `json:"lossless"`       // lossless webp / avif; png is always lossless, jpg never
+	DominantColor bool `json:"dominant_color"` // TaskResult.DominantColor of the result
+	PaletteColors int  `json:"palette_colors"` // TaskResult.Palette of the result, 0..MaxPalette colors
+	AverageColor  bool `json:"average_color"`  // TaskResult.AverageColor of the result
 
-	// MinQuality — ниже этого качества max_bytes не опускается, 1..100; 0 —
+	// MinQuality is the quality max_bytes never goes below, 1..100; 0 —
 	// BEE_IMAGES_MIN_QUALITY
 	MinQuality int `json:"min_quality,omitempty"`
 
-	// Effort — усилие кодера avif, 0..9: выше — медленнее и меньше; nil —
-	// BEE_IMAGES_AVIF_EFFORT (0 — осмысленное значение, поэтому указатель)
+	// Effort is the avif encoder effort, 0..9: higher is slower and smaller;
+	// nil — BEE_IMAGES_AVIF_EFFORT (0 is a meaningful value, hence a pointer)
 	Effort *int `json:"effort,omitempty"`
 }
 
-// Color — прямой (не premultiplied) rgba
+// Color is a straight (not premultiplied) rgba
 type Color struct {
 	R, G, B, A uint8
 }
 
-// Hex — #rrggbb, альфа отброшена
+// Hex returns #rrggbb, alpha dropped
 func (a Color) Hex() string {
 	return fmt.Sprintf("#%02x%02x%02x", a.R, a.G, a.B)
 }
 
-// MaxBrightness — предел Brightness: 300 %, каналы × 3
+// MaxBrightness is the Brightness limit: 300 %, channels × 3
 func (a Profile) MaxBrightness() float64 {
 	return 3
 }
 
-// MaxSharpness — предел Sharpness: 300 %, мелкие детали × 3
+// MaxSharpness is the Sharpness limit: 300 %, fine detail × 3
 func (a Profile) MaxSharpness() float64 {
 	return 3
 }
 
-// MaxBlur — предел Blur: 300 %, три сигмы Blur 1
+// MaxBlur is the Blur limit: 300 %, three times the sigma of Blur 1
 func (a Profile) MaxBlur() float64 {
 	return 3
 }
 
-// MaxPalette — предел PaletteColors, цветов
+// MaxPalette is the PaletteColors limit, colors
 func (a Profile) MaxPalette() int {
 	return 16
 }
 
-// FitOrInside — Fit, пустой — inside
+// FitOrInside returns Fit, inside when empty
 func (a Profile) FitOrInside() Fit {
 	if a.Fit == "" {
 		return Inside
@@ -100,12 +99,12 @@ func (a Profile) FitOrInside() Fit {
 	return a.Fit
 }
 
-// Validate — все поля в своих пределах. Лимиты bee (самая длинная
-// сторона) проверяет движок
+// Validate checks all fields are within their limits. Bee limits (the
+// longest side) are checked by the engine
 func (a Profile) Validate() *code.Error {
 	fit := a.FitOrInside()
 
-	// формат и вписывание
+	// format and fit
 	switch {
 	case !a.Format.IsOutput():
 		return code.New(code.InvalidJob, fmt.Sprintf("format %q is not jpg, png, webp or avif", string(a.Format)), nil)
@@ -115,7 +114,7 @@ func (a Profile) Validate() *code.Error {
 		return code.New(code.InvalidJob, "jpg has no lossless mode", nil)
 	}
 
-	// качество
+	// quality
 	switch {
 	case a.Quality < 0, a.Quality > 100:
 		return code.New(code.InvalidQuality, "quality must be within 0..100", nil)
@@ -125,7 +124,7 @@ func (a Profile) Validate() *code.Error {
 		return code.New(code.InvalidQuality, "min_quality must be within 0..100", nil)
 	}
 
-	// коробка
+	// box
 	switch {
 	case a.MaxWidth < 0, a.MaxHeight < 0:
 		return code.New(code.InvalidDimensions, "max_width and max_height must not be negative", nil)
@@ -133,7 +132,7 @@ func (a Profile) Validate() *code.Error {
 		return code.New(code.InvalidDimensions, fit.String()+" needs max_width and max_height", nil)
 	}
 
-	// эффекты: !(x >= 0 && x <= max) ловит и NaN
+	// effects: !(x >= 0 && x <= max) also catches NaN
 	switch {
 	case !(a.Blur >= 0 && a.Blur <= a.MaxBlur()):
 		return code.New(code.InvalidJob, fmt.Sprintf("blur must be within 0..%v", a.MaxBlur()), nil)
@@ -143,7 +142,7 @@ func (a Profile) Validate() *code.Error {
 		return code.New(code.InvalidJob, fmt.Sprintf("brightness must be within 0..%v", a.MaxBrightness()), nil)
 	}
 
-	// остальное
+	// the rest
 	switch {
 	case a.MaxBytes < 0:
 		return code.New(code.InvalidJob, "max_bytes must not be negative", nil)
@@ -153,7 +152,7 @@ func (a Profile) Validate() *code.Error {
 		return code.New(code.InvalidJob, "effort must be within 0..9", nil)
 	}
 
-	// цвет фона
+	// background color
 	_, err := a.Background()
 	if err != nil {
 		return code.New(code.InvalidJob, err.Error(), nil)
@@ -162,15 +161,15 @@ func (a Profile) Validate() *code.Error {
 	return nil
 }
 
-// Background — BackgroundColor: #rgb, #rrggbb или #rrggbbaa, альфа 255,
-// если не задана; пусто — прозрачный
+// Background parses BackgroundColor: #rgb, #rrggbb or #rrggbbaa, alpha 255
+// when not set; empty — transparent
 func (a Profile) Background() (Color, error) {
 	s := a.BackgroundColor
 	if s == "" {
 		return Color{}, nil
 	}
 
-	// без решётки — не цвет
+	// no hash — not a color
 	hexa, ok := strings.CutPrefix(s, "#")
 	if !ok {
 		return Color{}, fmt.Errorf("background_color %q is not #rgb, #rrggbb or #rrggbbaa", s)
@@ -194,7 +193,8 @@ func (a Profile) Background() (Color, error) {
 	return Color{R: b[0], G: b[1], B: b[2], A: b[3]}, nil
 }
 
-// Lossy — кодирование берёт Quality: jpg, и webp / avif без lossless
+// Lossy reports whether encoding uses Quality: jpg, and webp / avif without
+// lossless
 func (a Profile) Lossy() bool {
 	switch {
 	case a.Format == Jpg:
@@ -206,19 +206,19 @@ func (a Profile) Lossy() bool {
 	return !a.Lossless
 }
 
-// Geometry — размер результата для оригинала w×h (уже повёрнутого).
+// Geometry returns the result size for an original of w×h (already rotated).
 //
-//	inside   вписан в коробку, пропорции сохранены; ось 0 без ограничения,
-//	         без коробки — размер оригинала
-//	cover    ровно коробка: покрыть её, лишнее обрезать; без Upscale
-//	         оригинал меньше коробки не увеличивается: результат — самая
-//	         большая обрезка с пропорциями коробки
-//	contain  ровно коробка: картинка вписана (как inside), по центру,
-//	         остальное залито BackgroundColor
-//	fill     ровно коробка, растянуто; без Upscale каждая сторона не
-//	         больше стороны оригинала
+//	inside   fitted into the box, aspect ratio kept; a 0 axis is unlimited,
+//	         no box — the original size
+//	cover    exactly the box: cover it, crop the excess; without Upscale an
+//	         original smaller than the box is not enlarged: the result is
+//	         the largest crop with the box aspect ratio
+//	contain  exactly the box: the image fitted (like inside), centered,
+//	         the rest filled with BackgroundColor
+//	fill     exactly the box, stretched; without Upscale each side is no
+//	         larger than the original's side
 //
-// Без Upscale inside и contain оригинал не увеличивают
+// Without Upscale inside and contain do not enlarge the original
 func (a Profile) Geometry(w, h int) Geometry {
 	bw := float64(a.MaxWidth)
 	bh := float64(a.MaxHeight)
@@ -232,7 +232,7 @@ func (a Profile) Geometry(w, h int) Geometry {
 		return a.fill(w, h)
 	}
 
-	// масштаб inside и contain
+	// inside and contain scale
 	s := math.Inf(1)
 	if a.MaxWidth > 0 {
 		s = bw / fw
@@ -258,14 +258,14 @@ func (a Profile) Geometry(w, h int) Geometry {
 	return Geometry{Width: iw, Height: ih, ImageWidth: iw, ImageHeight: ih}
 }
 
-// cover — коробка целиком или, без Upscale, самая большая обрезка её
-// пропорций в оригинале
+// cover returns the whole box or, without Upscale, the largest crop of its
+// aspect ratio inside the original
 func (a Profile) cover(bw, bh, fw, fh float64) Geometry {
 	if a.Upscale || (bw <= fw && bh <= fh) {
 		return Geometry{Width: a.MaxWidth, Height: a.MaxHeight, ImageWidth: a.MaxWidth, ImageHeight: a.MaxHeight}
 	}
 
-	// меньше 1: коробка не помещается в оригинал
+	// below 1: the box does not fit into the original
 	k := math.Min(fw/bw, fh/bh)
 	cw := max(1, int(math.Round(bw*k)))
 	ch := max(1, int(math.Round(bh*k)))
@@ -273,7 +273,8 @@ func (a Profile) cover(bw, bh, fw, fh float64) Geometry {
 	return Geometry{Width: cw, Height: ch, ImageWidth: cw, ImageHeight: ch}
 }
 
-// fill — коробка, без Upscale не больше оригинала по каждой стороне
+// fill returns the box, without Upscale no larger than the original on each
+// side
 func (a Profile) fill(w, h int) Geometry {
 	if a.Upscale {
 		return Geometry{Width: a.MaxWidth, Height: a.MaxHeight, ImageWidth: a.MaxWidth, ImageHeight: a.MaxHeight}
@@ -285,8 +286,9 @@ func (a Profile) fill(w, h int) Geometry {
 	return Geometry{Width: sw, Height: sh, ImageWidth: sw, ImageHeight: sh}
 }
 
-// Geometry — размер одного результата: результат Width×Height, картинка в
-// нём ImageWidth×ImageHeight (меньше только у contain, остальное — фон)
+// Geometry is the size of one result: the result is Width×Height, the image
+// inside it ImageWidth×ImageHeight (smaller only for contain, the rest is
+// background)
 type Geometry struct {
 	Width, Height           int
 	ImageWidth, ImageHeight int

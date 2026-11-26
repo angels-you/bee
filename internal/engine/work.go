@@ -19,32 +19,32 @@ import (
 	"github.com/angels-you/bee/pkg/types/code"
 )
 
-// work — общее состояние одной job любого типа: слот, таймаут, папка,
-// загрузки, журнал, метрики, логи
+// work is the shared state of one job of any type: slot, timeout, folder,
+// uploads, ledger, metrics, logs
 type work struct {
 	engine *Engine
 	kind   string // audio, stream, video, images
 	id     string
-	input  string // url оригинала, в логах без query
-	output string // входной объект job (ключ журнала); пусто у картинок
+	input  string // source url, logged without query
+	output string // job entry object (ledger key); empty for images
 	start  time.Time
-	dir    string // временная папка job
+	dir    string // job temp folder
 	log    *slog.Logger
 
-	// скачивания
+	// downloads
 	downloaded int64
-	downloads  context.Context // контекст всех скачиваний job: BEE_DOWNLOAD_TIMEOUT
+	downloads  context.Context // context of all job downloads: BEE_DOWNLOAD_TIMEOUT
 
-	// загрузки
+	// uploads
 	mu       sync.Mutex
-	uploaded int64 // байт загружено
-	failed   error // первая ошибка волны
+	uploaded int64 // bytes uploaded
+	failed   error // first error of the wave
 
-	// время этапов для логов
+	// stage timings for logs
 	downloadMs, processMs, uploadMs int64
 }
 
-// newWork — состояние job, она посчитана как принятая
+// newWork creates the job state; the job is counted as accepted
 func (a *Engine) newWork(kind proto.Kind, id, input string) *work {
 	a.Metrics.started(string(kind))
 
@@ -58,20 +58,20 @@ func (a *Engine) newWork(kind proto.Kind, id, input string) *work {
 	}
 }
 
-// begin — слот, таймаут типа и временная папка; end освобождает всё.
-// Вернувшийся контекст — контекст job
+// begin takes a slot, the type timeout and the temp folder; end releases all of them.
+// The returned context is the job context
 func (a *work) begin(ctx context.Context, timeout time.Duration) (jctx context.Context, end func(), e *code.Error) {
 	e = a.engine.acquire(ctx)
 	if e != nil {
 		return nil, nil, e
 	}
 
-	// таймаут job и скачиваний
+	// job and download timeouts
 	jctx, cancel := context.WithTimeout(ctx, timeout)
 	downloads, cancelDownloads := context.WithTimeout(jctx, a.engine.cfg.DownloadTimeout)
 	a.downloads = downloads
 
-	// временная папка
+	// temp folder
 	dir, err := os.MkdirTemp(a.engine.cfg.TempDir, a.kind+"-")
 	if err != nil {
 		cancelDownloads()
@@ -90,13 +90,13 @@ func (a *work) begin(ctx context.Context, timeout time.Duration) (jctx context.C
 	return jctx, end, nil
 }
 
-// fetch — один url (field называет его в ошибках) в <dir>/<name> в
-// пределах BEE_DOWNLOAD_TIMEOUT всех скачиваний job
+// fetch downloads one url (field names it in errors) to <dir>/<name>
+// within BEE_DOWNLOAD_TIMEOUT for all job downloads
 func (a *work) fetch(ctx context.Context, field, rawURL, name string) (string, storage.Info, *code.Error) {
 	t := time.Now()
 	defer a.took(&a.downloadMs, t)
 
-	// скачиваем
+	// download
 	file := filepath.Join(a.dir, name)
 	info, err := a.engine.down[proto.Kind(a.kind)].Download(a.downloads, rawURL, file)
 	if err == nil {
@@ -105,23 +105,23 @@ func (a *work) fetch(ctx context.Context, field, rawURL, name string) (string, s
 		return file, info, nil
 	}
 
-	// контекст job закончился раньше скачиваний
+	// the job context ended before the downloads
 	if ctx.Err() != nil {
 		return "", info, code.As(ctx.Err())
 	}
 
-	// ошибка загрузчика уже с кодом, добавляем поле
+	// the downloader error already has a code, add the field
 	e := code.As(err)
 	return "", info, code.New(e.Code, field+": "+e.Message, e.Err)
 }
 
-// took — время с t прибавляется к счётчику этапа
+// took adds the time since t to the stage counter
 func (a *work) took(ms *int64, t time.Time) {
 	*ms += time.Since(t).Milliseconds()
 }
 
-// storageError — неудачный вызов хранилища: таймаут — STORAGE_TIMEOUT,
-// закончившийся контекст job — как есть, остальное — STORAGE_UNAVAILABLE
+// storageError maps a failed storage call: timeout is STORAGE_TIMEOUT,
+// an ended job context is returned as is, anything else is STORAGE_UNAVAILABLE
 func (a *work) storageError(ctx context.Context, what string, err error) *code.Error {
 	var ne net.Error
 
@@ -137,9 +137,9 @@ func (a *work) storageError(ctx context.Context, what string, err error) *code.E
 	return code.New(code.StorageUnavailable, what+" failed", err)
 }
 
-// published — входной объект уже в хранилище? Нет — job работает. Да —
-// результат этой же job из журнала (done true), иначе ALREADY_EXISTS:
-// новый запуск — новые ключи. res — результат в json
+// published reports whether the entry object is already in storage. No: the job runs. Yes:
+// the result of this same job from the ledger (done true), else ALREADY_EXISTS:
+// a new run needs new keys. res is the result as json
 func (a *work) published(ctx context.Context) (res []byte, done bool, e *code.Error) {
 	exists, err := a.engine.storage.Exists(ctx, a.output)
 	if err != nil {
@@ -150,7 +150,7 @@ func (a *work) published(ctx context.Context) (res []byte, done bool, e *code.Er
 		return nil, false, nil
 	}
 
-	// чей это объект
+	// whose object is it
 	taken := code.New(code.AlreadyExists, "an object is already stored at output", nil)
 	ledger := a.engine.ledger
 	if ledger == nil {
@@ -170,8 +170,8 @@ func (a *work) published(ctx context.Context) (res []byte, done bool, e *code.Er
 	return res, true, nil
 }
 
-// remember — результат в журнал (если он есть) перед публикацией входного
-// объекта; ошибка оставляет вход неопубликованным
+// remember saves the result to the ledger (if there is one) before publishing the entry
+// object; an error leaves the entry unpublished
 func (a *work) remember(ctx context.Context, res any) *code.Error {
 	ledger := a.engine.ledger
 	if ledger == nil {
@@ -195,14 +195,14 @@ func (a *work) remember(ctx context.Context, res any) *code.Error {
 	return code.New(code.InternalTemporaryError, "ledger save failed", err)
 }
 
-// ledgerKey — ключ журнала: sha256 типа, id и входного объекта
+// ledgerKey is the ledger key: sha256 of the type, id and entry object
 func (a *work) ledgerKey() string {
 	sum := sha256.Sum256([]byte(a.kind + "\n" + a.id + "\n" + a.output))
 
 	return hex.EncodeToString(sum[:])
 }
 
-// stored — каждый ключ есть в хранилище
+// stored reports that every key is in storage
 func (a *work) stored(ctx context.Context, keys []string) *code.Error {
 	for _, key := range keys {
 		ok, err := a.engine.storage.Exists(ctx, key)
@@ -218,7 +218,7 @@ func (a *work) stored(ctx context.Context, keys []string) *code.Error {
 	return nil
 }
 
-// done — успешная job: метрики и лог
+// done handles a successful job: metrics and log
 func (a *work) done(attrs ...any) {
 	elapsed := time.Since(a.start)
 	a.engine.Metrics.finished(a.kind, "", elapsed)
@@ -235,7 +235,7 @@ func (a *work) done(attrs ...any) {
 	a.log.Info("engine: done", attrs...)
 }
 
-// again — сохранённый результат job, уже выполненной раньше
+// again returns the saved result of a job that already ran
 func (a *work) again() {
 	elapsed := time.Since(a.start)
 	a.engine.Metrics.finished(a.kind, "", elapsed)
@@ -243,7 +243,7 @@ func (a *work) again() {
 	a.log.Info("engine: already done, the stored result is returned", "elapsed_ms", elapsed.Milliseconds())
 }
 
-// fail — упавшая job: метрики и лог без query url
+// fail handles a failed job: metrics and log without the url query
 func (a *work) fail(e *code.Error) {
 	elapsed := time.Since(a.start)
 	a.engine.Metrics.finished(a.kind, e.Code, elapsed)
@@ -261,12 +261,12 @@ func (a *work) fail(e *code.Error) {
 	)
 }
 
-// elapsed — миллисекунд с начала job
+// elapsed returns milliseconds since the job started
 func (a *work) elapsed() int64 {
 	return time.Since(a.start).Milliseconds()
 }
 
-// processing — обработка (ffmpeg, vips) с t: в счётчик job и в метрики
+// processing adds processing time (ffmpeg, vips) since t to the job counter and metrics
 func (a *work) processing(t time.Time) {
 	elapsed := time.Since(t)
 	a.processMs += elapsed.Milliseconds()

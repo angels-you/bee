@@ -1,10 +1,11 @@
-// Package config — настройки bee из env (envy, префикс BEE_). Обязательны
-// только хранилище (BEE_STORAGE и ключи выбранного вида) и хотя бы один
-// транспорт (BEE_HTTP_ADDR, BEE_GRPC_ADDR или BEE_NATS_URL); у всего
-// остального есть дефолты (defaults), все они видны в cmd/.env.
+// Package config holds bee settings from env (envy, prefix BEE_). Only
+// the storage (BEE_STORAGE and the keys of the chosen kind) and at least one
+// transport (BEE_HTTP_ADDR, BEE_GRPC_ADDR or BEE_NATS_URL) are required,
+// and BEE_TOKEN with http or grpc;
+// everything else has defaults (defaults), all of them shown in cmd/.env.
 //
-// Лимиты сервера (размер, длительность, concurrency, timeout) job не
-// меняет; параметры обработки здесь — только дефолты для пустых полей job
+// A job cannot change server limits (size, duration, concurrency, timeout);
+// processing parameters here are only defaults for empty job fields
 package config
 
 import (
@@ -16,18 +17,18 @@ import (
 	"github.com/monopolly/envy"
 )
 
-// Config — все настройки bee
+// Config holds all bee settings
 type Config struct {
-	WorkerID          string        `env:"WORKER_ID"`             // имя bee в логах и в nats
-	TempDir           string        `env:"TEMP_DIR"`              // здесь создаются временные папки job
-	Concurrency       int           `env:"CONCURRENCY"`           // job одновременно, все типы вместе, не меньше 1
-	QueueWait         time.Duration `env:"QUEUE_WAIT"`            // сколько job ждёт свободный слот, 0 — сразу отказ
-	DownloadTimeout   time.Duration `env:"DOWNLOAD_TIMEOUT"`      // скачивание всех url одной job, не больше Timeout типа
-	UploadConcurrency int           `env:"UPLOAD_CONCURRENCY"`    // объектов одной job загружается одновременно
-	ShutdownTimeout   time.Duration `env:"SHUTDOWN_TIMEOUT"`      // сколько работающие job получают при остановке
-	Token             string        `env:"TOKEN"`                 // токен http и grpc; пусто — без проверки
-	SourceHosts       []string      `env:"SOURCE_HOSTS"`          // разрешённые хосты url (по суффиксу); пусто — любой публичный
-	AllowInsecure     bool          `env:"ALLOW_INSECURE_SOURCE"` // http и приватные адреса: только разработка и тесты
+	WorkerID          string        `env:"WORKER_ID"`             // bee name in logs and in nats
+	TempDir           string        `env:"TEMP_DIR"`              // temporary job folders are created here
+	Concurrency       int           `env:"CONCURRENCY"`           // jobs at once, all types together, at least 1
+	QueueWait         time.Duration `env:"QUEUE_WAIT"`            // how long a job waits for a free slot, 0 rejects at once
+	DownloadTimeout   time.Duration `env:"DOWNLOAD_TIMEOUT"`      // download of all urls of one job, at most the type Timeout
+	UploadConcurrency int           `env:"UPLOAD_CONCURRENCY"`    // objects of one job uploaded at once
+	ShutdownTimeout   time.Duration `env:"SHUTDOWN_TIMEOUT"`      // how long running jobs get on shutdown
+	Token             string        `env:"TOKEN"`                 // http and grpc token; required with either of them
+	SourceHosts       []string      `env:"SOURCE_HOSTS"`          // allowed url hosts (by suffix); empty means any public host
+	AllowInsecure     bool          `env:"ALLOW_INSECURE_SOURCE"` // http and private addresses: development and tests only
 
 	Tools   Tools
 	Storage Storage
@@ -40,14 +41,14 @@ type Config struct {
 	NATS    NATS   `prefix:"NATS_"`
 }
 
-// Load — дефолты, потом .env файлы (если переданы; настоящий env важнее
-// файла), потом env BEE_*, и проверка. Ошибка называет каждое неверное
-// поле
+// Load applies defaults, then .env files (if given; the real env wins over
+// the file), then env BEE_*, and validates. The error names every invalid
+// field
 func Load(files ...string) (*Config, error) {
 	a := &Config{}
 	a.defaults()
 
-	// .env файлы
+	// .env files
 	for _, name := range files {
 		err := envy.File(name)
 		if err != nil {
@@ -55,7 +56,7 @@ func Load(files ...string) (*Config, error) {
 		}
 	}
 
-	// env поверх дефолтов: незаданный ключ дефолт не трогает
+	// env over defaults: an unset key leaves the default alone
 	env := struct {
 		Bee *Config `prefix:"BEE_"`
 	}{Bee: a}
@@ -73,8 +74,8 @@ func Load(files ...string) (*Config, error) {
 	return a, nil
 }
 
-// defaults — значения всех необязательных ключей; их же показывает
-// cmd/.env. Хранилище и транспорты дефолтов не имеют
+// defaults returns the values of all optional keys; cmd/.env shows the same
+// values. Storage and transports have no defaults
 func (a *Config) defaults() {
 	a.WorkerID = "bee-1"
 	a.TempDir = "/tmp/bee"
@@ -96,8 +97,8 @@ func (a *Config) defaults() {
 	a.Health.defaults()
 }
 
-// validate — все поля в своих пределах; все ошибки сразу, по строке на
-// поле
+// validate checks that all fields are within their limits; all errors at once,
+// one line per field
 func (a *Config) validate() error {
 	var errs []error
 
@@ -112,7 +113,7 @@ func (a *Config) validate() error {
 	return errors.Join(errs...)
 }
 
-// validateCommon — общие поля
+// validateCommon checks the common fields
 func (a *Config) validateCommon() (errs []error) {
 	if a.WorkerID == "" {
 		errs = append(errs, errors.New("config: BEE_WORKER_ID is required"))
@@ -142,7 +143,7 @@ func (a *Config) validateCommon() (errs []error) {
 		errs = append(errs, errors.New("config: BEE_SHUTDOWN_TIMEOUT must not be negative"))
 	}
 
-	// хосты: без пустых и пробелов
+	// hosts: no empty ones and no spaces
 	for _, h := range a.SourceHosts {
 		switch {
 		case h == "":
@@ -155,8 +156,8 @@ func (a *Config) validateCommon() (errs []error) {
 	return
 }
 
-// validateTransports — хотя бы один транспорт, и включённый nats в
-// своих пределах
+// validateTransports checks that at least one transport is enabled and an
+// enabled nats is within its limits
 func (a *Config) validateTransports() (errs []error) {
 	if a.transports() == 0 {
 		errs = append(errs, errors.New("config: no transport: set BEE_HTTP_ADDR, BEE_GRPC_ADDR or BEE_NATS_URL"))
@@ -181,8 +182,8 @@ func (a *Config) validateTransports() (errs []error) {
 	return
 }
 
-// SourceHostAllowed — host один из SourceHosts или под ним; любой, если
-// список пуст. Для storage.Downloader.HostAllowed
+// SourceHostAllowed reports whether host is one of SourceHosts or under one;
+// any host if the list is empty. For storage.Downloader.HostAllowed
 func (a *Config) SourceHostAllowed(host string) bool {
 	if len(a.SourceHosts) == 0 {
 		return true
@@ -203,7 +204,7 @@ func (a *Config) SourceHostAllowed(host string) bool {
 	return false
 }
 
-// transports — сколько транспортов включено
+// transports returns how many transports are enabled
 func (a *Config) transports() (n int) {
 	if a.HTTP.Enabled() {
 		n++
@@ -220,8 +221,8 @@ func (a *Config) transports() (n int) {
 	return
 }
 
-// Defaults — конфиг только с дефолтами, без env и без проверки: основа
-// для тестов, хранилище и транспорты не заданы
+// Defaults returns a config with defaults only, no env and no validation: a base
+// for tests, storage and transports are not set
 func Defaults() *Config {
 	a := &Config{}
 	a.defaults()

@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-// TestRetryable — повторяемые коды; каждый из них, кроме истёкшего url,
-// ещё и передоставляется, и только повторяемый код передоставляется
+// TestRetryable checks retryable codes; each of them except the expired
+// url is also redelivered, and only a retryable code is redelivered
 func TestRetryable(t *testing.T) {
 	retry := map[Code]bool{
 		DownloadTimeout:        true,
@@ -43,8 +43,8 @@ func TestRetryable(t *testing.T) {
 	}
 }
 
-// TestAs — типизированная ошибка проходит даже обёрнутой, всё остальное —
-// временная внутренняя; причина в json не попадает
+// TestAs checks that a typed error passes even wrapped, everything else is
+// a temporary internal error; the cause stays out of json
 func TestAs(t *testing.T) {
 	typed := New(InvalidPath, "bad", nil)
 

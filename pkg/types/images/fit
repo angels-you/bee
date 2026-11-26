@@ -1,7 +1,7 @@
 package images
 
 // name=Fit type=string
-inside  // Без обрезки, сохраняет пропорции
-cover   // Заполнение с обрезкой
-contain // Вписывание с добавлением фона
-fill    // Растягивание
+inside  // No crop, keeps the aspect ratio
+cover   // Fills the box, crops the excess
+contain // Fits inside, pads with the background
+fill    // Stretches

@@ -1,5 +1,5 @@
-// Package tools — мелкие утилиты bee без контекста: ключи хранилища и
-// url. Без зависимостей, его импортируют и публичные типы job
+// Package tools holds small context-free bee utilities: storage keys and
+// urls. No dependencies, the public job types import it too
 package tools
 
 import (
@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-// CleanKey — ключ хранилища в нормальном виде: прямые слэши, без ".." и
-// "//", без "/" по краям: "a//b/../c" → "a/c"
+// CleanKey returns a storage key in normal form: forward slashes, no ".." or
+// "//", no "/" at the edges: "a//b/../c" → "a/c"
 func CleanKey(key string) string {
 	key = strings.TrimSpace(key)
 	key = strings.ReplaceAll(key, "\\", "/")
@@ -17,9 +17,9 @@ func CleanKey(key string) string {
 	return strings.Trim(path.Clean("/"+key), "/")
 }
 
-// Key — проверка ключа результата из job: один "/" в начале
-// допускается и срезается, остальное должно быть уже чистым относительным
-// ключом. ok false — ключ пустой или грязный
+// Key validates a result key from a job: one leading "/" is
+// allowed and stripped, the rest must already be a clean relative
+// key. ok is false if the key is empty or dirty
 func Key(raw string) (key string, ok bool) {
 	key = strings.TrimSpace(raw)
 	key = strings.TrimPrefix(key, "/")
@@ -44,8 +44,8 @@ func Key(raw string) (key string, ok bool) {
 	return key, true
 }
 
-// URL — url из job разобран и у него есть хост; схема и хост проверяет
-// уже загрузчик по настройкам bee
+// URL parses a url from a job and checks it has a host; the scheme and host are
+// checked by the downloader according to bee settings
 func URL(raw string) (u *url.URL, ok bool) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
@@ -59,7 +59,7 @@ func URL(raw string) (u *url.URL, ok bool) {
 	return u, true
 }
 
-// SafeURL — url для логов: без query (подпись presigned), userinfo и
+// SafeURL returns a url for logs: without query (presigned signature), userinfo and
 // fragment
 func SafeURL(raw string) string {
 	u, err := url.Parse(raw)

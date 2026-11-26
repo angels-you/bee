@@ -1,8 +1,8 @@
-// Package video — job видео bee (Stream: HLS, Video: один MP4) и их
-// результат. Без зависимостей от сервера: пакет импортирует клиент.
-// Пустое поле job — дефолт bee (env BEE_VIDEO_*) или значение, указанное
-// в комментарии поля; лимиты bee (размер, длительность, стороны) job не
-// меняет.
+// Package video holds the video bee jobs (Stream: HLS, Video: one MP4) and
+// their result. No server dependencies: the client imports this package.
+// An empty job field means the bee default (env BEE_VIDEO_*) or the value
+// given in the field comment; a job does not change the bee limits (size,
+// duration, sides).
 //
 // Jobs and results of the bee video worker.
 // All bitrates are in decimal kbit/s, time values are in seconds,

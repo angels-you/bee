@@ -114,8 +114,8 @@ func TestBackground(t *testing.T) {
 	}
 }
 
-// TestParams — параметры обработки из job: пусто — дефолт bee, иначе в
-// своих пределах
+// TestParams checks the job processing parameters: empty is the bee
+// default, otherwise within their limits
 func TestParams(t *testing.T) {
 	zero := 0
 	nine := 9
@@ -145,7 +145,7 @@ func TestParams(t *testing.T) {
 	}
 }
 
-// TestJobValidate — id, url, задачи, ключи результатов
+// TestJobValidate checks id, url, tasks and result keys
 func TestJobValidate(t *testing.T) {
 	profile := Profile{Format: Webp, Quality: 80, MaxWidth: 100}
 

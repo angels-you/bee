@@ -13,10 +13,10 @@ import (
 	"github.com/angels-you/bee/pkg/storage/s3/provider"
 )
 
-// TestPrepare — дефолты провайдера и отказ неполных creds
+// TestPrepare checks provider defaults and rejection of incomplete creds
 func TestPrepare(t *testing.T) {
 
-	// hetzner: endpoint по региону, https
+	// hetzner: endpoint by region, https
 	c := Creds{Provider: provider.Hetzner, Key: "k", Secret: "s", Bucket: "b"}
 	err := c.prepare()
 	switch {
@@ -30,7 +30,7 @@ func TestPrepare(t *testing.T) {
 		t.Errorf("timeout %s", c.Timeout)
 	}
 
-	// r2: регион всегда auto, endpoint по аккаунту
+	// r2: region is always auto, endpoint by account
 	c = Creds{Provider: provider.Cloudflare, Region: "eu", Account: "acc", Key: "k", Secret: "s", Bucket: "b"}
 	err = c.prepare()
 	switch {
@@ -42,7 +42,7 @@ func TestPrepare(t *testing.T) {
 		t.Errorf("endpoint %s", c.Endpoint)
 	}
 
-	// minio: свой endpoint, http можно
+	// minio: own endpoint, http allowed
 	c = Creds{Provider: provider.MinIO, Endpoint: "minio:9000", Key: "k", Secret: "s", Bucket: "b"}
 	err = c.prepare()
 	switch {
@@ -52,7 +52,7 @@ func TestPrepare(t *testing.T) {
 		t.Error("hosted provider keeps Secure as set")
 	}
 
-	// отказы
+	// rejections
 	bad := []Creds{
 		{Key: "k", Secret: "s", Bucket: "b"},
 		{Provider: provider.Cloudflare, Key: "k", Secret: "s", Bucket: "b"},
@@ -69,7 +69,7 @@ func TestPrepare(t *testing.T) {
 	}
 }
 
-// TestBucketError — ошибка конфига возвращается из каждого метода
+// TestBucketError checks that a config error is returned from every method
 func TestBucketError(t *testing.T) {
 	b := NewBucket(Creds{Provider: provider.Hetzner})
 
@@ -89,7 +89,7 @@ func TestBucketError(t *testing.T) {
 	}
 }
 
-// TestKeys — префикс хранилища, префикс листинга и срок подписи
+// TestKeys checks the storage prefix, the listing prefix and the signature lifetime
 func TestKeys(t *testing.T) {
 	b := NewBucket(Creds{Provider: provider.Hetzner, Key: "k", Secret: "s", Bucket: "b"})
 
@@ -123,9 +123,9 @@ func TestKeys(t *testing.T) {
 	}
 }
 
-// TestLive — живой тест бакета: только если заданы BEE_TEST_S3_PROVIDER,
-// _KEY, _SECRET, _BUCKET (и при необходимости _ENDPOINT, _REGION,
-// _ACCOUNT). Все объекты под test/, в конце DeletePrefix их убирает
+// TestLive is a live bucket test: runs only if BEE_TEST_S3_PROVIDER,
+// _KEY, _SECRET, _BUCKET are set (and if needed _ENDPOINT, _REGION,
+// _ACCOUNT). All objects go under test/, DeletePrefix removes them at the end
 func TestLive(t *testing.T) {
 	name := os.Getenv("BEE_TEST_S3_PROVIDER")
 	if name == "" {
@@ -142,7 +142,7 @@ func TestLive(t *testing.T) {
 		Bucket:   os.Getenv("BEE_TEST_S3_BUCKET"),
 	}
 
-	// хранилище
+	// storage
 	st, err := New(creds, "test")
 	if err != nil {
 		t.Fatal("open:", err)
@@ -152,32 +152,32 @@ func TestLive(t *testing.T) {
 	ctx := context.Background()
 	body := fmt.Appendf(nil, "bee s3 test %s", time.Now().Format(time.RFC3339Nano))
 
-	// запись
+	// write
 	err = iface.Put(ctx, "a/hello.txt", bytes.NewReader(body), int64(len(body)), "text/plain")
 	if err != nil {
 		t.Fatal("put:", err)
 	}
 
-	// есть
+	// exists
 	ok, err := iface.Exists(ctx, "a/hello.txt")
 	if err != nil || !ok {
 		t.Fatalf("exists %v %v", ok, err)
 	}
 
-	// нет
+	// missing
 	ok, err = iface.Exists(ctx, "a/nope.txt")
 	if err != nil || ok {
 		t.Fatalf("missing %v %v", ok, err)
 	}
 
-	// чтение
+	// read
 	b := st.bucket
 	got, err := b.Get("test/a/hello.txt")
 	if err != nil || !bytes.Equal(got, body) {
 		t.Fatalf("get %q %v", got, err)
 	}
 
-	// метаданные
+	// metadata
 	info, err := b.Stat("test/a/hello.txt")
 	switch {
 	case err != nil:
@@ -188,7 +188,7 @@ func TestLive(t *testing.T) {
 		t.Errorf("stat content type %s", info.ContentType)
 	}
 
-	// копия и перенос
+	// copy and move
 	err = b.Copy("test/a/hello.txt", "test/b/copy.txt")
 	if err != nil {
 		t.Fatal("copy:", err)
@@ -199,19 +199,19 @@ func TestLive(t *testing.T) {
 		t.Fatal("move:", err)
 	}
 
-	// листинг
+	// listing
 	files, err := b.List("test/", 0)
 	if err != nil || len(files) != 2 {
 		t.Fatalf("list %d %v", len(files), err)
 	}
 
-	// подпись
+	// signature
 	link, err := b.PresignRead("test/a/hello.txt", time.Minute)
 	if err != nil || link == "" {
 		t.Fatalf("presign %q %v", link, err)
 	}
 
-	// уборка
+	// cleanup
 	deleted, err := b.DeletePrefix("test/")
 	if err != nil || deleted != 2 {
 		t.Fatalf("delete prefix %d %v", deleted, err)

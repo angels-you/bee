@@ -1,6 +1,6 @@
-// Package testbee — стенд тестов bee: конфиг тестов, хранилище и журнал в
-// памяти, сервер оригиналов, nats-server на время теста и готовый движок
-// с маленькими оригиналами всех трёх типов
+// Package testbee is the bee test bench: test config, in-memory storage and
+// ledger, a source server, nats-server for the test duration and a ready engine
+// with small sources of all three types
 package testbee
 
 import (
@@ -34,14 +34,14 @@ import (
 	"github.com/angels-you/bee/pkg/types/video"
 )
 
-// Object — одна сохранённая загрузка
+// Object is one saved upload
 type Object struct {
 	Data        []byte
 	ContentType string
 }
 
-// Store — storage.Storage в памяти; нулевое значение пустое и готово.
-// Ключ в Fail роняет свой Put; Exists падает, пока задан ExistsErr
+// Store is an in-memory storage.Storage; the zero value is empty and ready.
+// A key in Fail fails its Put; Exists fails while ExistsErr is set
 type Store struct {
 	mu        sync.Mutex
 	objects   map[string]Object
@@ -50,7 +50,7 @@ type Store struct {
 	ExistsErr error
 }
 
-// Put — тело под ключом
+// Put stores the body under the key
 func (a *Store) Put(ctx context.Context, key string, body io.Reader, size int64, contentType string) error {
 	err := ctx.Err()
 	if err != nil {
@@ -81,7 +81,7 @@ func (a *Store) Put(ctx context.Context, key string, body io.Reader, size int64,
 	return nil
 }
 
-// Exists — ключ сохранён
+// Exists reports that the key is saved
 func (a *Store) Exists(ctx context.Context, key string) (bool, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -94,12 +94,12 @@ func (a *Store) Exists(ctx context.Context, key string) (bool, error) {
 	return ok, nil
 }
 
-// Ping — всегда доступно
+// Ping is always available
 func (a *Store) Ping(ctx context.Context) error {
 	return nil
 }
 
-// Keys — все сохранённые ключи по порядку
+// Keys returns all saved keys in order
 func (a *Store) Keys() []string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -113,7 +113,7 @@ func (a *Store) Keys() []string {
 	return keys
 }
 
-// Get — объект по ключу
+// Get returns the object by key
 func (a *Store) Get(key string) (Object, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -122,7 +122,7 @@ func (a *Store) Get(key string) (Object, bool) {
 	return o, ok
 }
 
-// Puts — вызовов Put, вместе с неудачными
+// Puts returns the number of Put calls, failed ones included
 func (a *Store) Puts() int {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -130,13 +130,13 @@ func (a *Store) Puts() int {
 	return a.puts
 }
 
-// Ledger — engine.Ledger в памяти; нулевое значение пустое и готово
+// Ledger is an in-memory engine.Ledger; the zero value is empty and ready
 type Ledger struct {
 	mu      sync.Mutex
 	results map[string][]byte
 }
 
-// Save — значение под ключом
+// Save stores the value under the key
 func (a *Ledger) Save(ctx context.Context, key string, value []byte) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -148,7 +148,7 @@ func (a *Ledger) Save(ctx context.Context, key string, value []byte) error {
 	return nil
 }
 
-// Load — значение по ключу
+// Load returns the value by key
 func (a *Ledger) Load(ctx context.Context, key string) ([]byte, bool, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -157,9 +157,9 @@ func (a *Ledger) Load(ctx context.Context, key string) ([]byte, bool, error) {
 	return value, ok, nil
 }
 
-// Sources — сервер оригиналов тестов: файлы Dir по имени; имя под /hold/
-// отвечает, только когда закрыт Hold (или запрос отменён); FailNext
-// заставляет следующие запросы имени отвечать 503; запросы считаются
+// Sources is the test source server: files of Dir by name; a name under /hold/
+// responds only once Hold is closed (or the request is canceled); FailNext
+// makes the next requests for a name respond 503; requests are counted
 type Sources struct {
 	Dir  string
 	Hold chan struct{}
@@ -169,11 +169,11 @@ type Sources struct {
 	fail map[string]int
 }
 
-// ServeHTTP — один файл
+// ServeHTTP serves one file
 func (a *Sources) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	name := path.Base(r.URL.Path)
 
-	// счёт и, может быть, отказ
+	// count and maybe refuse
 	a.mu.Lock()
 	if a.hits == nil {
 		a.hits = map[string]int{}
@@ -190,7 +190,7 @@ func (a *Sources) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// держим до отпускания
+	// hold until released
 	if strings.HasPrefix(r.URL.Path, "/hold/") {
 		select {
 		case <-a.Hold:
@@ -202,7 +202,7 @@ func (a *Sources) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, filepath.Join(a.Dir, name))
 }
 
-// Count — запросов имени
+// Count returns the number of requests for a name
 func (a *Sources) Count(name string) int {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -210,7 +210,7 @@ func (a *Sources) Count(name string) int {
 	return a.hits[name]
 }
 
-// FailNext — следующие n запросов имени отвечают 503
+// FailNext makes the next n requests for a name respond 503
 func (a *Sources) FailNext(name string, n int) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -221,9 +221,9 @@ func (a *Sources) FailNext(name string, n int) {
 	a.fail[name] = n
 }
 
-// Bench — движок тестов: хранилище и журнал в памяти, сервер оригиналов
-// над сгенерированными файлами, логи в Logs. Start его собирает;
-// пропускает тест без ffmpeg, ffprobe или vips
+// Bench is the test engine: in-memory storage and ledger, a source server
+// over generated files, logs in Logs. Start builds it;
+// skips the test without ffmpeg, ffprobe or vips
 type Bench struct {
 	T       testing.TB
 	Config  *config.Config
@@ -235,8 +235,8 @@ type Bench struct {
 	Engine  *engine.Engine
 }
 
-// Start — стенд с оригиналами: song.wav (3 с), source.mp4 (2 с, 320×568
-// со звуком), photo.tif (320×240)
+// Start builds the bench with sources: song.wav (3 s), source.mp4 (2 s, 320×568
+// with sound), photo.tif (320×240)
 func (a *Bench) Start() {
 	a.T.Helper()
 
@@ -247,7 +247,7 @@ func (a *Bench) Start() {
 		}
 	}
 
-	// оригиналы
+	// sources
 	dir := a.T.TempDir()
 	testaudio.Generate(a.T, dir, testaudio.Opts{Name: "song.wav", Seconds: 3, VolumeDB: -12})
 	media := testvideo.Maker{T: a.T, Dir: dir}
@@ -259,7 +259,7 @@ func (a *Bench) Start() {
 	a.Server = httptest.NewServer(a.Sources)
 	a.T.Cleanup(a.Server.Close)
 
-	// движок
+	// engine
 	a.Store = &Store{}
 	a.Ledger = &Ledger{}
 	a.Logs = &bytes.Buffer{}
@@ -267,7 +267,7 @@ func (a *Bench) Start() {
 	a.Restart()
 }
 
-// Restart — новый движок над тем же стендом (после правки Config)
+// Restart builds a new engine over the same bench (after editing Config)
 func (a *Bench) Restart() {
 	a.T.Helper()
 
@@ -280,7 +280,7 @@ func (a *Bench) Restart() {
 	a.Engine = e
 }
 
-// config — дефолты bee с быстрыми и маленькими значениями тестов
+// config returns the bee defaults with fast, small test values
 func (a *Bench) config() *config.Config {
 	c := config.Defaults()
 
@@ -311,12 +311,12 @@ func (a *Bench) config() *config.Config {
 	return c
 }
 
-// URL — url оригинала с секретной подписью в query
+// URL returns the source url with a secret signature in the query
 func (a *Bench) URL(name string) string {
 	return a.Server.URL + "/" + name + "?X-Amz-Signature=secretsignature"
 }
 
-// Audio — аудио job из song.wav с master в <dir>/master.m3u8 и waveform
+// Audio returns an audio job from song.wav with master at <dir>/master.m3u8 and waveform
 func (a *Bench) Audio(id, dir string) audio.Job {
 	return audio.Job{
 		ID:     id,
@@ -326,7 +326,7 @@ func (a *Bench) Audio(id, dir string) audio.Job {
 	}
 }
 
-// Stream — маленький Stream одного варианта из source.mp4 в <dir>/index.m3u8
+// Stream returns a small single-variant Stream from source.mp4 at <dir>/index.m3u8
 func (a *Bench) Stream(id, dir string) video.Stream {
 	return video.Stream{
 		ID:       id,
@@ -338,7 +338,7 @@ func (a *Bench) Stream(id, dir string) video.Stream {
 	}
 }
 
-// Video — маленький MP4 из source.mp4 в <dir>/video.mp4
+// Video returns a small MP4 from source.mp4 at <dir>/video.mp4
 func (a *Bench) Video(id, dir string) video.Video {
 	return video.Video{
 		ID:      id,
@@ -349,7 +349,7 @@ func (a *Bench) Video(id, dir string) video.Video {
 	}
 }
 
-// Images — две картинки из photo.tif в <dir>/
+// Images returns two images from photo.tif in <dir>/
 func (a *Bench) Images(id, dir string) images.Job {
 	return images.Job{
 		ID:    id,
@@ -361,9 +361,9 @@ func (a *Bench) Images(id, dir string) images.Job {
 	}
 }
 
-// NATS — nats-server с JetStream на свободном порту и временном
-// хранилище, останавливается с тестом; его url. Без nats-server в PATH
-// тест пропускается
+// NATS starts nats-server with JetStream on a free port and temporary
+// storage, stopped with the test; returns its url. Without nats-server in PATH
+// the test is skipped
 func NATS(t testing.TB) string {
 	t.Helper()
 
@@ -372,7 +372,7 @@ func NATS(t testing.TB) string {
 		t.Skip("nats-server is not in PATH")
 	}
 
-	// свободный порт
+	// free port
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -380,7 +380,7 @@ func NATS(t testing.TB) string {
 	port := strconv.Itoa(lis.Addr().(*net.TCPAddr).Port)
 	lis.Close()
 
-	// сервер, останавливается с тестом
+	// server, stopped with the test
 	srv := &natsServer{cmd: exec.Command(bin, "-js", "-a", "127.0.0.1", "-p", port, "-sd", t.TempDir())}
 	srv.cmd.Stdout = &srv.out
 	srv.cmd.Stderr = &srv.out
@@ -390,7 +390,7 @@ func NATS(t testing.TB) string {
 	}
 	t.Cleanup(srv.stop)
 
-	// поднят, когда отвечает
+	// up when it responds
 	url := "nats://127.0.0.1:" + port
 	for range 100 {
 		nc, err := nats.Connect(url)
@@ -406,19 +406,19 @@ func NATS(t testing.TB) string {
 	return ""
 }
 
-// natsServer — запущенный nats-server и его вывод
+// natsServer is a running nats-server and its output
 type natsServer struct {
 	cmd  *exec.Cmd
 	out  bytes.Buffer
 	once sync.Once
 }
 
-// stop — убивает сервер один раз и ждёт его
+// stop kills the server once and waits for it
 func (a *natsServer) stop() {
 	a.once.Do(a.kill)
 }
 
-// kill — процесс завершён, его вывод полный
+// kill reports the process is done and its output complete
 func (a *natsServer) kill() {
 	a.cmd.Process.Kill()
 	a.cmd.Wait()

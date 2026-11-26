@@ -14,8 +14,8 @@ import (
 	job "github.com/angels-you/bee/pkg/types/video"
 )
 
-// videoCheck — проверка видео job против контракта job и конфига bee с
-// заполнением всех дефолтов: job.go и BEE_VIDEO_*
+// videoCheck checks a video job against the job contract and the bee config,
+// filling in every default: job.go and BEE_VIDEO_*
 type videoCheck struct {
 	cfg *config.Config
 }

@@ -18,19 +18,19 @@ import (
 	"github.com/angels-you/bee/pkg/types/code"
 )
 
-// fixture — тестовый сервер оригиналов и его тело
+// fixture is a test server of originals and its body
 type fixture struct {
 	body   []byte
 	secret string
 }
 
-// init — тело оригинала и подпись presigned тестовых url
+// init sets the original body and the presigned signature of test urls
 func (a *fixture) init() {
 	a.body = bytes.Repeat([]byte("audio"), 1000)
 	a.secret = "X-Amz-Signature=TOPSECRET"
 }
 
-// serve — ответы тестового сервера по пути
+// serve returns test server responses by path
 func (a *fixture) serve(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/agent":
@@ -57,7 +57,7 @@ func (a *fixture) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// codeOf — код ошибки загрузчика
+// codeOf returns the downloader error code
 func (a *fixture) codeOf(err error) code.Code {
 	var e *code.Error
 	if !errors.As(err, &e) {
@@ -78,7 +78,7 @@ func TestDownload(t *testing.T) {
 	dir := t.TempDir()
 	d := &Downloader{UserAgent: "test/1", MaxSize: 10000, AllowInsecure: true}
 
-	// обычная загрузка
+	// normal download
 	info, err := d.Download(ctx, srv.URL+"/ok", filepath.Join(dir, "ok"))
 	if err != nil {
 		t.Fatal(err)
@@ -105,13 +105,13 @@ func TestDownload(t *testing.T) {
 		t.Errorf("user agent %q %v", ua, err)
 	}
 
-	// один редирект
+	// one redirect
 	_, err = d.Download(ctx, srv.URL+"/redirect", filepath.Join(dir, "r"))
 	if err != nil {
 		t.Errorf("one redirect must work: %v", err)
 	}
 
-	// коды ошибок
+	// error codes
 	cases := map[string]code.Code{
 		"/expired": code.SourceUrlExpired,
 		"/denied":  code.SourceUnavailable,
@@ -127,7 +127,7 @@ func TestDownload(t *testing.T) {
 		}
 	}
 
-	// слишком большой
+	// too large
 	small := &Downloader{MaxSize: 100, AllowInsecure: true}
 	_, err = small.Download(ctx, srv.URL+"/ok", filepath.Join(dir, "x"))
 	if f.codeOf(err) != code.SourceTooLarge {
@@ -139,7 +139,7 @@ func TestDownload(t *testing.T) {
 		t.Error("failed download must not leave a file")
 	}
 
-	// таймаут загрузки
+	// download timeout
 	tctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer cancel()
 
@@ -148,7 +148,7 @@ func TestDownload(t *testing.T) {
 		t.Errorf("timeout: %v", err)
 	}
 
-	// боевой режим: http и loopback отклоняются до запроса
+	// production mode: http and loopback are rejected before the request
 	strict := &Downloader{}
 	_, err = strict.Download(ctx, srv.URL+"/ok", filepath.Join(dir, "x"))
 	if f.codeOf(err) != code.InvalidJob {
@@ -169,10 +169,10 @@ func TestDownload(t *testing.T) {
 	}
 }
 
-// TestDownloadErrorsKeepQueryOut — ошибка http клиента называет url, на
-// котором упала: первый (connection refused) и цель редиректа (too many
-// redirects); ни в одной нет query (подписи presigned), userinfo и
-// fragment, а причина остаётся доступной
+// TestDownloadErrorsKeepQueryOut checks that an http client error names the url
+// it failed on: the first one (connection refused) and the redirect target (too many
+// redirects); none contains the query (presigned signature), userinfo or
+// fragment, and the cause stays available
 func TestDownloadErrorsKeepQueryOut(t *testing.T) {
 	f := fixture{}
 	f.init()
@@ -208,7 +208,7 @@ func TestDownloadErrorsKeepQueryOut(t *testing.T) {
 		}
 	}
 
-	// url не разбирается: ошибка без его текста
+	// the url does not parse: the error has no url text
 	_, err := d.Download(ctx, "http://user:TOPSECRET@[::1", dst)
 	switch {
 	case f.codeOf(err) != code.InvalidJob:
