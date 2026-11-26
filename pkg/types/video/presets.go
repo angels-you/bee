@@ -69,30 +69,50 @@ func Preset(q Quality) (Profile, bool) {
 
 // VerticalMobile: 360p + 720p. Recommended initial ladder for low storage/CPU.
 // ~18.93 MB/min stored for both renditions; a viewer downloads one at a time.
-func VerticalMobile() []Profile { return profiles(Quality360p, Quality720p) }
+func VerticalMobile() []Profile {
+	return []Profile{
+		Quality360p.profile(),
+		Quality720p.profile(),
+	}
+}
 
 // VerticalStandard: 360p + 720p + 1080p. ~46.14 MB/min stored.
-func VerticalStandard() []Profile { return profiles(Quality360p, Quality720p, Quality1080p) }
+func VerticalStandard() []Profile {
+	return []Profile{
+		Quality360p.profile(),
+		Quality720p.profile(),
+		Quality1080p.profile(),
+	}
+}
 
 // VerticalEconomy: 240p + 480p + 720p. ~24.29 MB/min stored.
-func VerticalEconomy() []Profile { return profiles(Quality240p, Quality480p, Quality720p) }
+func VerticalEconomy() []Profile {
+	return []Profile{
+		Quality240p.profile(),
+		Quality480p.profile(),
+		Quality720p.profile(),
+	}
+}
 
 // VerticalFull: 240p + 360p + 480p + 720p + 1080p. ~55.97 MB/min stored.
 func VerticalFull() []Profile {
-	return profiles(Quality240p, Quality360p, Quality480p, Quality720p, Quality1080p)
+	return []Profile{
+		Quality240p.profile(),
+		Quality360p.profile(),
+		Quality480p.profile(),
+		Quality720p.profile(),
+		Quality1080p.profile(),
+	}
 }
 
-// profiles is used only with known internal Quality constants.
-func profiles(qualities ...Quality) []Profile {
-	out := make([]Profile, 0, len(qualities))
-	for _, q := range qualities {
-		p, ok := Preset(q)
-		if !ok {
-			panic("unknown vertical preset: " + string(q))
-		}
-		out = append(out, p)
+// profile — the preset of a known Quality constant; panics on an unknown
+// one, so it is used only with the constants above.
+func (q Quality) profile() Profile {
+	p, ok := Preset(q)
+	if !ok {
+		panic("unknown vertical preset: " + string(q))
 	}
-	return out
+	return p
 }
 
 // EstimatedBytes estimates encoded media payload at target bitrates.

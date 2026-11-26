@@ -60,9 +60,11 @@ func (a *Maker) Clip(c Clip) string {
 	out := filepath.Join(a.Dir, c.Name)
 
 	// the inputs
-	args := []string{"-f", "lavfi", "-i", fmt.Sprintf("testsrc2=size=%dx%d:rate=%d:duration=%g", c.Width, c.Height, c.FPS, c.Seconds)}
+	frames := fmt.Sprintf("testsrc2=size=%dx%d:rate=%d:duration=%g", c.Width, c.Height, c.FPS, c.Seconds)
+	args := []string{"-f", "lavfi", "-i", frames}
 	if c.Audio {
-		args = append(args, "-f", "lavfi", "-i", fmt.Sprintf("sine=frequency=440:sample_rate=48000:duration=%g", c.Seconds))
+		sine := fmt.Sprintf("sine=frequency=440:sample_rate=48000:duration=%g", c.Seconds)
+		args = append(args, "-f", "lavfi", "-i", sine)
 	}
 
 	// square or anamorphic pixels
@@ -117,8 +119,10 @@ func (a *Maker) Sound(s Sound) string {
 func (a *Maker) Picture(p Picture) string {
 	a.T.Helper()
 	out := filepath.Join(a.Dir, p.Name)
-	a.ffmpeg("-f", "lavfi", "-i", fmt.Sprintf("color=c=white@0.5:size=%dx%d:duration=1", p.Width, p.Height),
-		"-frames:v", "1", "-vf", "format=rgba", "-update", "1", out)
+
+	// one half transparent white frame, rgba
+	source := fmt.Sprintf("color=c=white@0.5:size=%dx%d:duration=1", p.Width, p.Height)
+	a.ffmpeg("-f", "lavfi", "-i", source, "-frames:v", "1", "-vf", "format=rgba", "-update", "1", out)
 	return out
 }
 
@@ -126,13 +130,17 @@ func (a *Maker) Picture(p Picture) string {
 // fails it on an error.
 func (a *Maker) ffmpeg(args ...string) {
 	a.T.Helper()
+
+	// ffmpeg in PATH
 	bin, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		a.T.Skip("ffmpeg is not installed")
 	}
 
+	// quiet, overwriting run
 	args = append([]string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y"}, args...)
-	out, err := exec.Command(bin, args...).CombinedOutput()
+	cmd := exec.Command(bin, args...)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		a.T.Fatalf("ffmpeg %s: %v\n%s", strings.Join(args, " "), err, out)
 	}

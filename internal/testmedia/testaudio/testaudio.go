@@ -44,6 +44,8 @@ func Skip(t testing.TB) {
 func Generate(t testing.TB, dir string, o Opts) string {
 	t.Helper()
 	Skip(t)
+
+	// defaults
 	if o.Seconds <= 0 {
 		o.Seconds = 5
 	}
@@ -72,20 +74,29 @@ func Generate(t testing.TB, dir string, o Opts) string {
 	if o.Trail > 0 {
 		filters = append(filters, fmt.Sprintf("apad=pad_dur=%.2f", o.Trail))
 	}
-	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y",
-		"-f", "lavfi", "-i", fmt.Sprintf("sine=frequency=%d:sample_rate=%d:duration=%.2f", o.Freq, o.Rate, o.Seconds),
-	}
+
+	// the sine input
+	sine := fmt.Sprintf("sine=frequency=%d:sample_rate=%d:duration=%.2f", o.Freq, o.Rate, o.Seconds)
+	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", sine}
+
+	// the cover: a second input attached as a picture
 	if o.Cover {
 		args = append(args, "-f", "lavfi", "-i", "color=c=red:s=64x64:r=1:d=1",
 			"-map", "0:a", "-map", "1:v", "-c:v", "mjpeg", "-disposition:v:0", "attached_pic", "-id3v2_version", "3")
 	}
+
+	// filters and channels
 	args = append(args, "-af", strings.Join(filters, ","), "-ac", fmt.Sprint(o.Channels))
+
+	// tags
 	if o.Title != "" {
 		args = append(args, "-metadata", "title="+o.Title)
 	}
 	if o.Artist != "" {
 		args = append(args, "-metadata", "artist="+o.Artist)
 	}
+
+	// the codec by the extension
 	switch strings.ToLower(filepath.Ext(o.Name)) {
 	case ".mp3":
 		args = append(args, "-c:a", "libmp3lame", "-b:a", "192k")
@@ -99,8 +110,11 @@ func Generate(t testing.TB, dir string, o Opts) string {
 		args = append(args, "-c:a", "libvorbis")
 	}
 	args = append(args, out)
+
+	// run ffmpeg: a build without the encoder skips the test
 	cmd := exec.Command("ffmpeg", args...)
-	if res, err := cmd.CombinedOutput(); err != nil {
+	res, err := cmd.CombinedOutput()
+	if err != nil {
 		t.Skipf("ffmpeg cannot generate %s: %v: %s", o.Name, err, res)
 	}
 	return out

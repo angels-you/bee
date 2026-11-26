@@ -494,8 +494,10 @@ func (a *videoCheck) checkHLS(h *job.HLS, profiles []job.Profile) *code.Error {
 	case len(h.KeyURI) > 1024:
 		return code.New(code.InvalidJob, "hls.key_uri is longer than 1024 bytes", nil)
 	}
+	// the key uri: printable ascii only, no spaces and quotes
 	for _, c := range []byte(h.KeyURI) {
-		if c <= ' ' || c > '~' || c == '"' {
+		switch {
+		case c <= ' ', c > '~', c == '"':
 			return code.New(code.InvalidJob, "hls.key_uri may hold only printable ascii without quotes and spaces", nil)
 		}
 	}
@@ -624,7 +626,8 @@ func (a *videoCheck) renditionKeys(output string, profiles []job.Profile, keys m
 		// several: their folders
 		for _, p := range profiles {
 			folder := path.Join(dir, p.Name)
-			if key == folder || strings.HasPrefix(key, folder+"/") {
+			switch {
+			case key == folder, strings.HasPrefix(key, folder+"/"):
 				return code.New(code.InvalidPath, field+" lies in the folder of rendition "+p.Name, nil)
 			}
 		}
@@ -642,8 +645,12 @@ func (a *videoCheck) color(s string) (string, bool) {
 		digits = string([]byte{digits[0], digits[0], digits[1], digits[1], digits[2], digits[2]})
 	}
 
+	// three bytes of hex
 	b, err := hex.DecodeString(digits)
-	if err != nil || len(b) != 3 {
+	switch {
+	case err != nil:
+		return "", false
+	case len(b) != 3:
 		return "", false
 	}
 	return "#" + hex.EncodeToString(b), true
