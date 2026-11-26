@@ -36,8 +36,8 @@ func main() {
 		ID:       "track-1",
 		Input:    *input,
 		Output:   "tracks/1/master.m3u8",
-		Wave:     "tracks/1/wave.json",
-		Metadata: "tracks/1/meta.json",
+		WavePath: "tracks/1/wave.json",
+		MetaPath: "tracks/1/meta.json",
 		Options:  audio.Options{Normalize: true},
 	}
 

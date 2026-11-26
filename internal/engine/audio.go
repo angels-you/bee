@@ -50,9 +50,9 @@ type audioRendition struct {
 // last → verify. A failed job returns a Result with Error and the same
 // *code.Error as the error
 func (a *Engine) Audio(ctx context.Context, j audio.Job) (audio.Result, error) {
-	r := &audioRun{work: a.newWork(proto.Audio, j.ID, j.Input, j.UserMeta), job: j}
+	r := &audioRun{work: a.newWork(proto.Audio, j.ID, j.Input, j.Meta), job: j}
 	r.res.ID = j.ID
-	r.res.UserMeta = j.UserMeta
+	r.res.Meta = j.Meta
 	r.res.Metrics = map[string]int64{}
 
 	// the meta of the caller
@@ -140,7 +140,7 @@ func (a *Engine) checkAudio(j *audio.Job) *code.Error {
 	}
 
 	// each variant folder next to master belongs to HLS
-	others := map[string]string{"wave": j.Wave, "metadata": j.Metadata, "analysis": j.Analysis}
+	others := map[string]string{"wave_path": j.WavePath, "meta_path": j.MetaPath, "analysis_path": j.AnalysisPath}
 	for _, kbit := range o.Renditions {
 		folder := path.Join(path.Dir(j.Output), strconv.Itoa(kbit)) + "/"
 
@@ -307,7 +307,7 @@ func (a *audioRun) analyze(ctx context.Context) *code.Error {
 		SilenceMin:  cfg.SilenceSec,
 		DurationSec: float64(a.meta.DurationMs) / 1000,
 	}
-	if a.job.Wave != "" {
+	if a.job.WavePath != "" {
 		o.PCMPath = filepath.Join(a.dir, "pcm.raw")
 	}
 
@@ -513,9 +513,9 @@ func (a *audioRun) measure(ctx context.Context) {
 	}
 }
 
-// waveform writes json to Job.Wave and Result.Waveform (its peaks) from the analysis pcm
+// waveform writes json to Job.WavePath and Result.Waveform (its peaks) from the analysis pcm
 func (a *audioRun) waveform(ctx context.Context) *code.Error {
-	if a.job.Wave == "" {
+	if a.job.WavePath == "" {
 		return nil
 	}
 
@@ -541,7 +541,7 @@ func (a *audioRun) waveform(ctx context.Context) *code.Error {
 		return code.New(code.InternalTemporaryError, "waveform json", err)
 	}
 
-	a.files = append(a.files, upload{key: a.job.Wave, data: js})
+	a.files = append(a.files, upload{key: a.job.WavePath, data: js})
 	a.res.Waveform = w.Peaks(o.WaveformPoints)
 	return nil
 }
@@ -649,22 +649,22 @@ func (a *audioRun) sideFiles() ([]upload, *code.Error) {
 	var side []upload
 
 	// metadata
-	if a.job.Metadata != "" {
+	if a.job.MetaPath != "" {
 		meta := struct {
 			SHA256     string            `json:"sha256"`
 			Renditions []audio.Rendition `json:"renditions"`
-			Meta       *audio.Metadata   `json:"meta"`
+			Metadata   *audio.Metadata   `json:"metadata"`
 		}{a.res.SHA256, a.res.Renditions, &a.meta}
 
 		data, err := json.Marshal(meta)
 		if err != nil {
 			return nil, code.New(code.InternalTemporaryError, "metadata json", err)
 		}
-		side = append(side, upload{key: a.job.Metadata, data: data})
+		side = append(side, upload{key: a.job.MetaPath, data: data})
 	}
 
 	// analysis: only what is safe to publish
-	if a.job.Analysis != "" {
+	if a.job.AnalysisPath != "" {
 		analysis := struct {
 			Loudness *audio.Loudness `json:"loudness,omitempty"`
 			Quality  *audio.Quality  `json:"quality,omitempty"`
@@ -675,7 +675,7 @@ func (a *audioRun) sideFiles() ([]upload, *code.Error) {
 		if err != nil {
 			return nil, code.New(code.InternalTemporaryError, "analysis json", err)
 		}
-		side = append(side, upload{key: a.job.Analysis, data: data})
+		side = append(side, upload{key: a.job.AnalysisPath, data: data})
 	}
 
 	return side, nil
@@ -697,7 +697,7 @@ func (a *audioRun) verify(ctx context.Context) *code.Error {
 		)
 	}
 
-	for _, key := range []string{a.job.Wave, a.job.Metadata, a.job.Analysis} {
+	for _, key := range []string{a.job.WavePath, a.job.MetaPath, a.job.AnalysisPath} {
 		if key != "" {
 			required = append(required, key)
 		}
@@ -720,6 +720,13 @@ func (a *audioRun) short(err error) string {
 func (a *audioRun) done() (audio.Result, error) {
 	a.res.Elapsed = a.elapsed()
 	a.res.Metrics["total"] = a.res.Elapsed
+
+	// where the results lie
+	a.res.Output = a.job.Output
+	a.res.WavePath = a.job.WavePath
+	a.res.MetaPath = a.job.MetaPath
+	a.res.AnalysisPath = a.job.AnalysisPath
+
 	a.work.done("renditions", len(a.res.Renditions))
 
 	return a.res, nil

@@ -262,5 +262,5 @@ Defaults of empty job fields (see [jobs-images.md](jobs-images.md)):
 `BEE_VERSION` is set by the image at build time and only shown in the start
 log.
 
-The job `user_meta` limit (16 KB of json) and the job id rule are fixed: no key
+The job `meta` limit (16 KB of json) and the job id rule are fixed: no key
 changes them.

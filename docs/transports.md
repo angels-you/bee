@@ -27,7 +27,7 @@ On every transport, a job is the json of its type, and so is the result
 result returns the id exactly as sent: a number stays a number, a big
 integer keeps all its digits.
 
-**UserMeta.** Every job may carry `user_meta`: a json object of yours (a user id, a
+**Meta.** Every job may carry `meta`: a json object of yours (a user id, a
 row id, anything). bee never reads it, never logs it, and returns it
 untouched in the result, on failure too. At most 16 KB of json, else
 `INVALID_JOB`.
@@ -131,7 +131,7 @@ Typed protobuf messages are postponed. Calls are unary and synchronous.
 - `bee-retryable`: `true` or `false`
 
 Over gRPC, a failed job has no result body: the Go client fills `id`,
-`user_meta` (from the job it sent) and `error`. Partial data, for example audio
+`meta` (from the job it sent) and `error`. Partial data, for example audio
 `metadata`, comes only over HTTP and NATS.
 
 | gRPC code | bee codes |
@@ -216,7 +216,7 @@ Every message is a json **envelope**. A job:
   "kind": "images",
   "job": {
     "id": 42,
-    "user_meta": {"user": 7},
+    "meta": {"user": 7},
     "input": "https://example.com/photo.jpg",
     "tasks": [
       {"id": "small", "output": "photos/1/small.webp",
@@ -238,7 +238,7 @@ The result of that job, on the done subject:
   "id": 42,
   "result": {
     "id": 42,
-    "user_meta": {"user": 7},
+    "meta": {"user": 7},
     "tasks": [
       {"id": "small", "output": "photos/1/small.webp", "format": "webp",
        "width": 320, "height": 240, "size": 198, "quality": 80,
@@ -266,7 +266,7 @@ A failed job has `error` in its result:
   "id": 43,
   "result": {
     "id": 43,
-    "user_meta": {"user": 7},
+    "meta": {"user": 7},
     "elapsed": 0,
     "error": {"code": "INVALID_QUALITY", "message": "task small: quality is required for a lossy webp", "retryable": false}
   }
@@ -373,7 +373,7 @@ handler may see the same job id twice; make it safe for that.
   (a string of 1..128 printable characters or a whole number): dropped and logged. Nothing is published: there
   is no id to report to.
 - **A job with a valid id that is otherwise not valid** (bad fields, bad
-  urls, bad keys, `user_meta` over 16 KB): the failure is published on the done
+  urls, bad keys, `meta` over 16 KB): the failure is published on the done
   subject, usually `INVALID_JOB`.
 
 bee logs only the size of a dropped message, never its body (it may hold a

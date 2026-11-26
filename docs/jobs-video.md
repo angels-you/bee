@@ -25,7 +25,7 @@ sizes in bytes.
 | json | type | required | meaning |
 |---|---|---|---|
 | `id` | string or number | yes | A string of 1..128 printable characters (any language, spaces allowed, no line breaks) or a whole number. Returned in the result exactly as sent. |
-| `user_meta` | object | no | Your own data. bee never reads it and returns it untouched in the result, on failure too. At most 16 KB of json. |
+| `meta` | object | no | Your own data. bee never reads it and returns it untouched in the result, on failure too. At most 16 KB of json. |
 | `input` | string | yes | Url of the source video. https only (http only with `BEE_ALLOW_INSECURE_SOURCE`). The host must be in `BEE_SOURCE_HOSTS` when that is set. |
 | `output` | string | yes | Key of the entry playlist, ending in `.m3u8`. |
 | `options` | Options | no | Applies to every rendition. |
@@ -39,7 +39,7 @@ sizes in bytes.
 | json | type | required | meaning |
 |---|---|---|---|
 | `id` | string or number | yes | As for Stream. |
-| `user_meta` | object | no | As for Stream. |
+| `meta` | object | no | As for Stream. |
 | `input` | string | yes | As for Stream. |
 | `output` | string | yes | Key of the MP4, ending in `.mp4`. |
 | `options` | Options | no | |
@@ -199,7 +199,7 @@ Outside Go, write the profile out. `Preset("720p")` is:
 ```json
 {
   "id": 1111,
-  "user_meta": {"user": 7},
+  "meta": {"user": 7},
   "input": "https://uploads.example.com/raw/1111.mov?X-Amz-Signature=...",
   "output": "video/1111/index.m3u8",
   "options": {"vertical": true, "resize": "cover", "gravity": "center", "normalize": true},
@@ -219,7 +219,7 @@ Outside Go, write the profile out. `Preset("720p")` is:
 ```json
 {
   "id": "clip-1112",
-  "user_meta": {"user": 7},
+  "meta": {"user": 7},
   "input": "https://uploads.example.com/raw/1112.mp4?X-Amz-Signature=...",
   "output": "video/1112/video.mp4",
   "options": {"start": 2, "duration": 30, "watermark": {"input": "https://cdn.example.com/logo.png", "margin": 24}},
@@ -331,7 +331,7 @@ taken keys are your concern. A NATS redelivery runs the job again.
 | json | type | meaning |
 |---|---|---|
 | `id` | string or number | Job id, exactly as sent. |
-| `user_meta` | object | Job `user_meta`, exactly as sent. |
+| `meta` | object | Job `meta`, exactly as sent. |
 | `elapsed` | int | Milliseconds of the whole job. |
 | `sha256` | string | Of the source file. |
 | `source_size` | int | Source bytes. |
@@ -341,7 +341,7 @@ taken keys are your concern. A NATS redelivery runs the job again.
 | `profiles` | ProfileResult[] | Published renditions in order (skipped ones are left out). |
 | `thumbnails` | ImageResult[] | In job order. |
 | `preview` | ProfileResult | If asked. |
-| `error` | `{code, message, retryable}` | Failure only. A failed result has only `id`, `user_meta`, `elapsed` and `error`. |
+| `error` | `{code, message, retryable}` | Failure only. A failed result has only `id`, `meta`, `elapsed` and `error`. |
 
 **ProfileResult:** `name`, `output` (media playlist key, the mp4 key, or the
 preview key), `duration`, `width`, `height`, `fps`, `video_codec`,
@@ -356,7 +356,7 @@ init and segments, or the file), `segments` (0 for MP4).
 ```json
 {
   "id": 1111,
-  "user_meta": {"user": 7},
+  "meta": {"user": 7},
   "elapsed": 21834,
   "sha256": "5b1d…a0",
   "source_size": 48211934,

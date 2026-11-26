@@ -59,7 +59,7 @@ func main() {
 		Profiles:   video.VerticalMobile(),
 		HLS:        video.DefaultHLS(),
 		Thumbnails: []video.Thumbnail{{Output: "clips/1/cover.webp", Format: video.ImageWebP, Width: 720}},
-		UserMeta:   map[string]any{"clip": "first"},
+		Meta:       map[string]any{"clip": "first"},
 	}
 
 	// send and forget: the result comes to the worker

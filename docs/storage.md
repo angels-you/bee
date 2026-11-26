@@ -149,7 +149,7 @@ or `ceph` with `BEE_S3_ENDPOINT` and `BEE_S3_REGION` set.
 
 ## Keys
 
-Output keys come from the job (`output`, `wave`, `metadata`, ... and the
+Output keys come from the job (`output`, `wave_path`, `meta_path`, ... and the
 `output` of every image task). They are keys relative to the storage root,
 not urls and not bucket names. A key must be:
 

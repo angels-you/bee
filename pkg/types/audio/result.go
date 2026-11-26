@@ -2,14 +2,19 @@ package audio
 
 import "github.com/angels-you/bee/pkg/types/code"
 
-// Result is the result of one track: what bee measured. Result keys are
-// the client's keys (Job.Output, Wave, Metadata, Analysis) and are not repeated
-// here. A failed job has Error: none of its results count, whatever is
+// Result is the result of one track: what bee measured and where it wrote
+// it (Output, WavePath, MetaPath, AnalysisPath: the keys of the job, as
+// saved). A failed job has Error: none of its results count, whatever is
 // already in storage
 type Result struct {
-	ID       any            `json:"id"`                  // the job id as sent
-	UserMeta map[string]any `json:"user_meta,omitempty"` // the job meta as sent
-	Elapsed  int64          `json:"elapsed"`             // milliseconds for the whole job
+	ID      any            `json:"id"`             // the job id as sent
+	Meta    map[string]any `json:"meta,omitempty"` // the job meta as sent
+	Elapsed int64          `json:"elapsed"`        // milliseconds for the whole job
+
+	Output       string `json:"output,omitempty"`        // master playlist key, as saved
+	WavePath     string `json:"wave_path,omitempty"`     // waveform json key, as saved; empty — not made
+	MetaPath     string `json:"meta_path,omitempty"`     // track metadata json key, as saved; empty — not made
+	AnalysisPath string `json:"analysis_path,omitempty"` // analysis json key, as saved; empty — not made
 
 	SHA256     string `json:"sha256,omitempty"`      // of the original
 	SourceSize int64  `json:"source_size,omitempty"` // bytes of the original
@@ -24,7 +29,7 @@ type Result struct {
 
 	// Waveform holds the waveform json peaks, one byte per point (0 silence,
 	// 255 full scale), Options.WaveformPoints of them; empty without
-	// Job.Wave. Base64 in json
+	// Job.WavePath. Base64 in json
 	Waveform []byte `json:"waveform,omitempty"`
 
 	Metrics map[string]int64 `json:"metrics,omitempty"` // stage → milliseconds

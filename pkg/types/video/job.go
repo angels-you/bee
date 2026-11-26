@@ -17,10 +17,10 @@ import "github.com/angels-you/bee/pkg/types/code"
 // One rendition: a media playlist. Multiple renditions: a master playlist
 // referencing one media playlist per profile. The same playlists serve all clients.
 type StreamJob struct {
-	ID         any            `json:"id"`                  // Job ID: a string or a number, returned as sent.
-	UserMeta   map[string]any `json:"user_meta,omitempty"` // Data of the caller, returned untouched in the result.
-	Input      string         `json:"input"`               // Presigned HTTPS URL of the source video.
-	Output     string         `json:"output"`              // S3 object key: video/1111/index.m3u8.
+	ID         any            `json:"id"`             // Job ID: a string or a number, returned as sent.
+	Meta       map[string]any `json:"meta,omitempty"` // Data of the caller, returned untouched in the result.
+	Input      string         `json:"input"`          // Presigned HTTPS URL of the source video.
+	Output     string         `json:"output"`         // S3 object key: video/1111/index.m3u8.
 	Options    Options        `json:"options"`
 	Profiles   []Profile      `json:"profiles"` // One or more renditions, ordered low to high.
 	HLS        HLS            `json:"hls"`
@@ -30,10 +30,10 @@ type StreamJob struct {
 
 // VideoJob creates a single progressive MP4 file, without HLS encryption.
 type VideoJob struct {
-	ID         any            `json:"id"`                  // Job ID: a string or a number, returned as sent.
-	UserMeta   map[string]any `json:"user_meta,omitempty"` // Data of the caller, returned untouched in the result.
-	Input      string         `json:"input"`               // Presigned HTTPS URL of the source video.
-	Output     string         `json:"output"`              // S3 object key: video/1111/video.mp4.
+	ID         any            `json:"id"`             // Job ID: a string or a number, returned as sent.
+	Meta       map[string]any `json:"meta,omitempty"` // Data of the caller, returned untouched in the result.
+	Input      string         `json:"input"`          // Presigned HTTPS URL of the source video.
+	Output     string         `json:"output"`         // S3 object key: video/1111/video.mp4.
 	Options    Options        `json:"options"`
 	Profile    Profile        `json:"profile"`
 	Thumbnails []Thumbnail    `json:"thumbnails,omitempty"`
@@ -214,7 +214,7 @@ type Preview struct {
 // whatever is already in the storage.
 type Result struct {
 	ID         any             `json:"id"`                    // The job ID as sent.
-	UserMeta   map[string]any  `json:"user_meta,omitempty"`   // The job meta as sent.
+	Meta       map[string]any  `json:"meta,omitempty"`        // The job meta as sent.
 	Elapsed    int64           `json:"elapsed"`               // Milliseconds of the whole job.
 	SHA256     string          `json:"sha256,omitempty"`      // Of the source file.
 	SourceSize int64           `json:"source_size,omitempty"` // Source bytes.

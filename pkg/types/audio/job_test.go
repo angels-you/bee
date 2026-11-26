@@ -14,12 +14,12 @@ type fixture struct{}
 // job is a valid job with all keys
 func (a fixture) job() Job {
 	return Job{
-		ID:       "t1",
-		Input:    "https://example.com/a.wav?X-Amz-Signature=1",
-		Output:   "/tracks/1/master.m3u8",
-		Wave:     "tracks/1/wave.json",
-		Metadata: "tracks/1/meta.json",
-		Analysis: "tracks/1/analysis.json",
+		ID:           "t1",
+		Input:        "https://example.com/a.wav?X-Amz-Signature=1",
+		Output:       "/tracks/1/master.m3u8",
+		WavePath:     "tracks/1/wave.json",
+		MetaPath:     "tracks/1/meta.json",
+		AnalysisPath: "tracks/1/analysis.json",
 	}
 }
 
@@ -68,8 +68,8 @@ func TestRefuse(t *testing.T) {
 		"no output":      {func(j *Job) { j.Output = "" }, code.InvalidPath},
 		"output not hls": {func(j *Job) { j.Output = "a/master.mp4" }, code.InvalidPath},
 		"dirty output":   {func(j *Job) { j.Output = "a/../master.m3u8" }, code.InvalidPath},
-		"dirty wave":     {func(j *Job) { j.Wave = "a//wave.json" }, code.InvalidPath},
-		"same keys":      {func(j *Job) { j.Metadata = j.Wave }, code.InvalidPath},
+		"dirty wave":     {func(j *Job) { j.WavePath = "a//wave.json" }, code.InvalidPath},
+		"same keys":      {func(j *Job) { j.MetaPath = j.WavePath }, code.InvalidPath},
 		"short key":      {func(j *Job) { j.Key = []byte("short"); j.KeyURI = "skd://1" }, code.InvalidJob},
 		"key no uri":     {func(j *Job) { j.Key = []byte("0123456789abcdef") }, code.InvalidJob},
 		"key bad uri":    {func(j *Job) { j.Key = []byte("0123456789abcdef"); j.KeyURI = "skd://\"1" }, code.InvalidJob},

@@ -59,8 +59,8 @@ func TestAudio(t *testing.T) {
 	ctx := context.Background()
 
 	j := f.bench.Audio("a1", "tracks/1")
-	j.Metadata = "tracks/1/meta.json"
-	j.Analysis = "tracks/1/analysis.json"
+	j.MetaPath = "tracks/1/meta.json"
+	j.AnalysisPath = "tracks/1/analysis.json"
 
 	res, err := f.bench.Engine.Audio(ctx, j)
 	if err != nil {
@@ -85,6 +85,14 @@ func TestAudio(t *testing.T) {
 		t.Error("plain job is encrypted")
 	case res.Metadata == nil:
 		t.Error("no metadata")
+	case res.Output != "tracks/1/master.m3u8":
+		t.Errorf("output %q", res.Output)
+	case res.WavePath != "tracks/1/wave.json":
+		t.Errorf("wave path %q", res.WavePath)
+	case res.MetaPath != "tracks/1/meta.json":
+		t.Errorf("meta path %q", res.MetaPath)
+	case res.AnalysisPath != "tracks/1/analysis.json":
+		t.Errorf("analysis path %q", res.AnalysisPath)
 	case res.Loudness == nil:
 		t.Error("no loudness")
 	}
@@ -517,20 +525,20 @@ func TestMeta(t *testing.T) {
 	// a failure keeps id and meta
 	j := f.bench.Images("m1", "meta/1")
 	j.ID = 77
-	j.UserMeta = map[string]any{"user": "u1"}
+	j.Meta = map[string]any{"user": "u1"}
 	j.Input = f.bench.URL("missing.tif")
 
 	res, _ := f.bench.Engine.Images(ctx, j)
 	switch {
 	case res.ID != 77:
 		t.Errorf("id %v", res.ID)
-	case res.UserMeta["user"] != "u1":
-		t.Errorf("meta %v", res.UserMeta)
+	case res.Meta["user"] != "u1":
+		t.Errorf("meta %v", res.Meta)
 	}
 
 	// a meta above 16 KB of json
 	j = f.bench.Images("m2", "meta/2")
-	j.UserMeta = map[string]any{"big": strings.Repeat("x", 17<<10)}
+	j.Meta = map[string]any{"big": strings.Repeat("x", 17<<10)}
 
 	_, err := f.bench.Engine.Images(ctx, j)
 	if f.codeOf(err) != code.InvalidJob {
@@ -538,7 +546,7 @@ func TestMeta(t *testing.T) {
 	}
 
 	// json in, json out: the number id stays the same number
-	in := []byte(`{"id":9007199254740993,"user_meta":{"n":9007199254740993},"input":"x","tasks":[]}`)
+	in := []byte(`{"id":9007199254740993,"meta":{"n":9007199254740993},"input":"x","tasks":[]}`)
 	out, _ := f.bench.Engine.Do(ctx, "images", in)
 	if !strings.Contains(string(out), `"id":9007199254740993`) || !strings.Contains(string(out), `"n":9007199254740993`) {
 		t.Errorf("result %s", out)

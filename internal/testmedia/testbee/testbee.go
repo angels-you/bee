@@ -290,10 +290,10 @@ func (a *Bench) URL(name string) string {
 // Audio returns an audio job from song.wav with master at <dir>/master.m3u8 and waveform
 func (a *Bench) Audio(id, dir string) audio.Job {
 	return audio.Job{
-		ID:     id,
-		Input:  a.URL("song.wav"),
-		Output: dir + "/master.m3u8",
-		Wave:   dir + "/wave.json",
+		ID:       id,
+		Input:    a.URL("song.wav"),
+		Output:   dir + "/master.m3u8",
+		WavePath: dir + "/wave.json",
 	}
 }
 

@@ -31,10 +31,10 @@ In json:
   only logged. It is never sent to clients.
 
 A failed job answers the **result** of its type (`audio.Result`,
-`video.Result`, `images.Result`) with `id`, `user_meta` and `error` set and no outputs:
+`video.Result`, `images.Result`) with `id`, `meta` and `error` set and no outputs:
 
 ```json
-{"id": "track-1", "user_meta": {"album": 7}, "error": {"code": "INVALID_AUDIO", "message": "the audio has no audio stream", "retryable": false}}
+{"id": "track-1", "meta": {"album": 7}, "error": {"code": "INVALID_AUDIO", "message": "the audio has no audio stream", "retryable": false}}
 ```
 
 None of the outputs of a failed job count, even if some objects were
@@ -130,14 +130,14 @@ delivery depends on the code:
 | Code with redeliver on the last delivery (`BEE_NATS_MAX_DELIVER`) | Publishes the failure, then acks. Final. |
 | Code without redeliver | Publishes the failure, then acks. Final. |
 | bee is stopping and the job did not finish | Publishes nothing, naks at once: another bee takes it. |
-| The job has a valid `id` but is not valid otherwise (also `user_meta` over 16 KB) | Publishes `INVALID_JOB` (or another invalid code), acks. |
+| The job has a valid `id` but is not valid otherwise (also `meta` over 16 KB) | Publishes `INVALID_JOB` (or another invalid code), acks. |
 | The job has no `id`, or an id that breaks the rule | Terminated and logged; nothing is published (there is no id to report to). |
 | The message is not a json envelope, or its `kind` is unknown | Terminated and logged; nothing is published. |
 
 A job id must be a string of 1..128 printable characters (any language,
 spaces allowed, no line breaks or control characters) or a whole number,
 on every transport. `null`, `true`/`false`, objects, arrays and `""` are
-`INVALID_JOB`. A job `user_meta` above 16 KB of json is `INVALID_JOB` too.
+`INVALID_JOB`. A job `meta` above 16 KB of json is `INVALID_JOB` too.
 
 bee never checks whether output keys are taken: a job writes over them. A
 redelivered job runs again and publishes its result again (see

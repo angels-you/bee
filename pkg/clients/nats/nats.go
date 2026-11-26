@@ -17,11 +17,11 @@
 //			log.Println(res.ID, res.Error.Code)
 //			return
 //		}
-//		save(res.ID, res.UserMeta, res.Tasks)
+//		save(res.ID, res.Meta, res.Tasks)
 //	})
 //
 //	// send
-//	err = c.GenerateImages(images.Job{ID: 42, Input: url, Tasks: tasks, UserMeta: map[string]any{"user": 7}})
+//	err = c.GenerateImages(images.Job{ID: 42, Input: url, Tasks: tasks, Meta: map[string]any{"user": 7}})
 //
 // The first argument is the group of the service that reads the results,
 // for example "billing" or "api": every instance with the same group

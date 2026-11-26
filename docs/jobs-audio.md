@@ -18,12 +18,12 @@ waveform, metadata and an analysis json.
 | json | type | required | meaning |
 |---|---|---|---|
 | `id` | string or number | yes | Job id: a string of 1..128 printable characters (any language, spaces allowed, no line breaks) or a whole number. Returned in the result exactly as sent. |
-| `user_meta` | object | no | Your own data. bee never reads it and returns it untouched in the result, on failure too. At most 16 KB of json. |
+| `meta` | object | no | Your own data. bee never reads it and returns it untouched in the result, on failure too. At most 16 KB of json. |
 | `input` | string | yes | Url of the original (presigned GET or any public https). Logged without its query. Scheme and host are checked at download (https only unless `BEE_ALLOW_INSECURE_SOURCE`, host in `BEE_SOURCE_HOSTS` if set). |
 | `output` | string | yes | Storage key of the master playlist. Must end in `.m3u8`. |
-| `wave` | string | no | Storage key of the waveform json. Empty: no waveform json and no `result.waveform`. |
-| `metadata` | string | no | Storage key of the metadata json. Empty: not published. |
-| `analysis` | string | no | Storage key of the analysis json. Empty: not published. |
+| `wave_path` | string | no | Storage key of the waveform json. Empty: no waveform json and no `result.waveform`. |
+| `meta_path` | string | no | Storage key of the track metadata json. Empty: not published. |
+| `analysis_path` | string | no | Storage key of the analysis json. Empty: not published. |
 | `key` | bytes (base64 in json) | no | AES-128 key, exactly 16 bytes. Empty: HLS in the clear. Never logged, never stored. |
 | `key_uri` | string | with `key` | Key address written into the media playlists, e.g. `skd://1001`. No `"` and no line breaks. |
 | `options` | object | no | Processing options, see below. |
@@ -31,7 +31,7 @@ waveform, metadata and an analysis json.
 Storage keys are relative keys in the bee storage, not urls or bucket
 names. One leading `/` is trimmed. The rest must already be clean: no `..`,
 no `//`, no spaces, tabs, line breaks, `?`, `#` or `\`. All keys of a job
-must be different. `wave`, `metadata` and `analysis` must not lie in a
+must be different. `wave_path`, `meta_path` and `analysis_path` must not lie in a
 rendition folder (`<dir of output>/<kbit>/`). A broken key gives
 `INVALID_PATH`.
 
@@ -69,12 +69,12 @@ the job still succeeds and gets a `fingerprint` warning.
 ```json
 {
   "id": 1001,
-  "user_meta": {"album": 7},
+  "meta": {"album": 7},
   "input": "https://uploads.example.com/raw/1001.wav?X-Amz-Signature=...",
   "output": "tracks/1001/master.m3u8",
-  "wave": "tracks/1001/wave.json",
-  "metadata": "tracks/1001/meta.json",
-  "analysis": "tracks/1001/analysis.json",
+  "wave_path": "tracks/1001/wave.json",
+  "meta_path": "tracks/1001/meta.json",
+  "analysis_path": "tracks/1001/analysis.json",
   "key": "MDEyMzQ1Njc4OWFiY2RlZg==",
   "key_uri": "skd://1001",
   "options": {
@@ -105,7 +105,7 @@ The only required fields are `id`, `input` and `output`.
    `UNSUPPORTED_FORMAT`. A duration outside min..max gives
    `DURATION_LIMIT_EXCEEDED`.
 6. `analysis`: one decode pass for loudness (EBU R128), quality (if on),
-   and PCM for the waveform (if `wave` is set). A track with no sample
+   and PCM for the waveform (if `wave_path` is set). A track with no sample
    above -144 dB fails with `INVALID_AUDIO` ("track is silent").
 7. `fingerprint`: if asked. An error here becomes a warning.
 8. `normalize`: if `normalize` is set, compute the gain. It is linear only
@@ -114,7 +114,7 @@ The only required fields are `id`, `input` and `output`.
    be cut into exactly the same segments as the first, or the job fails
    with `VERIFY_FAILED`. Output loudness is measured on the first
    rendition.
-10. `waveform`: if `wave` is set.
+10. `waveform`: if `wave_path` is set.
 11. `upload`: in waves, with the master playlist last (see below).
 12. `verify`: check that the master, each media playlist, `init.mp4`, the
     first and last segment, and each requested json are in storage.
@@ -135,9 +135,9 @@ tracks/1001/128/seg_0001.m4s
 ...
 tracks/1001/64/...
 tracks/1001/256/...
-tracks/1001/wave.json            if wave is set
-tracks/1001/meta.json            if metadata is set
-tracks/1001/analysis.json        if analysis is set
+tracks/1001/wave.json            if wave_path is set
+tracks/1001/meta.json            if meta_path is set
+tracks/1001/analysis.json        if analysis_path is set
 ```
 
 Each rendition folder is `<dir of output>/<kbit>`. The master lists
@@ -150,13 +150,12 @@ Content-Type comes from the extension: `.m3u8`
 
 ### Json files
 
-- `wave`: `{"version":1,"duration_ms":…,"sample_rate":<points per second>,"channels":1,"min":[…],"max":[…],"rms":[…]}`.
+- `wave_path`: `{"version":1,"duration_ms":…,"sample_rate":<points per second>,"channels":1,"min":[…],"max":[…],"rms":[…]}`.
   It is a mono mix, after the normalize gain. `min` and `max` are the peak
   sample values of each bucket in [-1, 1], `rms` is in [0, 1], and all three
   arrays have the same length.
-- `metadata`: `{"sha256":"<original>","renditions":[<Rendition>…],"meta":<Metadata>}`
-  (inside this file the ffprobe metadata is under `meta`).
-- `analysis`: `{"loudness":<Loudness>,"quality":<Quality>,"warnings":[…]}`.
+- `meta_path`: `{"sha256":"<original>","renditions":[<Rendition>…],"metadata":<Metadata>}`.
+- `analysis_path`: `{"loudness":<Loudness>,"quality":<Quality>,"warnings":[…]}`.
   Only the fields that are set appear: no `quality` without analysis, and no
   `warnings` if there are none.
 
@@ -206,14 +205,18 @@ runs the job again and publishes its result again. See
 | json | type | meaning |
 |---|---|---|
 | `id` | string or number | Job id, exactly as sent. |
-| `user_meta` | object | Job `user_meta`, exactly as sent. |
+| `meta` | object | Job `meta`, exactly as sent. |
 | `elapsed` | int | Milliseconds for the whole job. |
+| `output` | string | Master playlist key, as saved. |
+| `wave_path` | string | Waveform json key, as saved. Empty if not made. |
+| `meta_path` | string | Track metadata json key, as saved. Empty if not made. |
+| `analysis_path` | string | Analysis json key, as saved. Empty if not made. |
 | `sha256` | string | sha256 of the original. |
 | `source_size` | int | Bytes of the original. |
 | `size` | int | Bytes published in total. |
 | `encrypted` | bool | Segments are encrypted with `key`. |
 | `renditions` | Rendition[] | In master playlist order. |
-| `waveform` | bytes (base64) | `waveform_points` peaks, one byte each (0 is silence, 255 is full scale). Only with `wave`. |
+| `waveform` | bytes (base64) | `waveform_points` peaks, one byte each (0 is silence, 255 is full scale). Only with `wave_path`. |
 | `metrics` | object | Stage name to milliseconds. |
 | `metadata` | Metadata | From ffprobe. |
 | `loudness` | Loudness | EBU R128 of the original and of the output. |
@@ -248,9 +251,9 @@ is finite. Silence reports -144 dB for levels and -70 LUFS for loudness.
 `duration` (seconds analyzed), `max_seconds`.
 
 On failure, the result keeps what bee already knew: `sha256`,
-`source_size`, `user_meta`, `metadata`, `loudness`, `quality`, `warnings` and `metrics`.
+`source_size`, `meta`, `metadata`, `loudness`, `quality`, `warnings` and `metrics`.
 `renditions`, `waveform` and `size` are cleared, and nothing in the result
-counts as published. Over gRPC, a failure carries only `id`, `user_meta` and `error` (see
+counts as published. Over gRPC, a failure carries only `id`, `meta` and `error` (see
 [transports.md](transports.md#grpc)).
 
 ### Example result
@@ -260,8 +263,12 @@ counts as published. Over gRPC, a failure carries only `id`, `user_meta` and `er
 ```json
 {
   "id": 1001,
-  "user_meta": {"album": 7},
+  "meta": {"album": 7},
   "elapsed": 8423,
+  "output": "tracks/1001/master.m3u8",
+  "wave_path": "tracks/1001/wave.json",
+  "meta_path": "tracks/1001/meta.json",
+  "analysis_path": "tracks/1001/analysis.json",
   "sha256": "9f2c…e1",
   "source_size": 41254012,
   "size": 12873311,

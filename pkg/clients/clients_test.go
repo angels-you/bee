@@ -146,7 +146,7 @@ func (a *fixture) run(c client) {
 	// a failed job: the result and the error carry the code
 	bad := a.bench.Images("i2", "e2e/bad")
 	bad.Input = a.bench.URL("missing.tif")
-	bad.UserMeta = map[string]any{"user": "u1"}
+	bad.Meta = map[string]any{"user": "u1"}
 	res, err := c.GenerateImages(ctx, bad)
 	switch {
 	case code.As(err) == nil:
@@ -157,8 +157,8 @@ func (a *fixture) run(c client) {
 		t.Error("no error in the result")
 	case res.ID != "i2":
 		t.Errorf("failed result id %v", res.ID)
-	case res.UserMeta["user"] != "u1":
-		t.Errorf("failed result meta %v", res.UserMeta)
+	case res.Meta["user"] != "u1":
+		t.Errorf("failed result meta %v", res.Meta)
 	}
 
 	// a rerun of a done job: it runs again over the same keys
@@ -170,7 +170,7 @@ func (a *fixture) run(c client) {
 	// a big number id and meta come back exactly as sent
 	big := a.bench.Images("x", "e2e/big")
 	big.ID = int64(9007199254740993)
-	big.UserMeta = map[string]any{"user": 7}
+	big.Meta = map[string]any{"user": 7}
 	br, err := c.GenerateImages(ctx, big)
 	if err != nil {
 		t.Fatalf("big id: %v", err)
@@ -180,7 +180,7 @@ func (a *fixture) run(c client) {
 	switch {
 	case !strings.Contains(string(data), `"id":9007199254740993`):
 		t.Errorf("big id changed: %s", data)
-	case !strings.Contains(string(data), `"user_meta":{"user":7}`):
+	case !strings.Contains(string(data), `"meta":{"user":7}`):
 		t.Errorf("meta changed: %s", data)
 	}
 }
@@ -368,7 +368,7 @@ func (a *fixture) send(c *beenats.Client) {
 	// audio with a big int id
 	audioJob := a.bench.Audio("x", "nats/audio")
 	audioJob.ID = int64(9007199254740993)
-	audioJob.UserMeta = meta
+	audioJob.Meta = meta
 	err := c.GenerateAudio(audioJob)
 	if err != nil {
 		t.Fatalf("audio: %v", err)
@@ -376,7 +376,7 @@ func (a *fixture) send(c *beenats.Client) {
 
 	// stream with a string id
 	stream := a.bench.Stream("abc", "nats/stream")
-	stream.UserMeta = meta
+	stream.Meta = meta
 	err = c.GenerateStream(stream)
 	if err != nil {
 		t.Fatalf("stream: %v", err)
@@ -399,7 +399,7 @@ func (a *fixture) send(c *beenats.Client) {
 	// a job that fails in bee
 	bad := a.bench.Images("bad", "nats/bad")
 	bad.Input = a.bench.URL("missing.tif")
-	bad.UserMeta = meta
+	bad.Meta = meta
 	err = c.GenerateImages(bad)
 	if err != nil {
 		t.Fatalf("bad images: %v", err)
@@ -428,14 +428,14 @@ func (a *fixture) check(got map[string]any) {
 		t.Errorf("audio: %+v", ar)
 	case !strings.Contains(string(data), `"id":9007199254740993`):
 		t.Errorf("audio id changed: %s", data)
-	case !strings.Contains(string(data), `"user_meta":{"note":"from the test","user":7}`):
+	case !strings.Contains(string(data), `"meta":{"note":"from the test","user":7}`):
 		t.Errorf("audio meta changed: %s", data)
 	}
 	a.stored("nats/audio/master.m3u8")
 
 	// stream with the string id
 	sr, _ := got["abc"].(video.Result)
-	if sr.Error != nil || len(sr.Profiles) != 1 || sr.ID != "abc" || sr.UserMeta["user"] == nil {
+	if sr.Error != nil || len(sr.Profiles) != 1 || sr.ID != "abc" || sr.Meta["user"] == nil {
 		t.Errorf("stream: %+v", sr)
 	}
 
@@ -454,7 +454,7 @@ func (a *fixture) check(got map[string]any) {
 
 	// the failure, with its meta
 	br, _ := got["bad"].(images.Result)
-	if br.Error == nil || br.Error.Code != code.SourceUnavailable || br.UserMeta["note"] != "from the test" {
+	if br.Error == nil || br.Error.Code != code.SourceUnavailable || br.Meta["note"] != "from the test" {
 		t.Errorf("bad images: %+v", br)
 	}
 }

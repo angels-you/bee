@@ -14,7 +14,7 @@ import (
 // Job is one track. Input is the url of the original (presigned GET or any
 // public https), logged without the query.
 //
-// Result keys (Output, Wave, Metadata, Analysis) are chosen by the client: they
+// Result keys (Output, WavePath, MetaPath, AnalysisPath) are chosen by the client: they
 // are keys in the bee storage (not a bucket and not an endpoint). Output is
 // required, the rest are not: a set key gets its result published there, an
 // empty one is skipped. bee writes over whatever lies at the keys.
@@ -23,18 +23,18 @@ import (
 // encrypted, without it HLS is published in the clear; it is never logged
 // and never stored
 type Job struct {
-	ID       any            `json:"id"`                  // a string or a number, returned as sent
-	UserMeta map[string]any `json:"user_meta,omitempty"` // data of the caller, returned untouched in the result
-	Input    string         `json:"input"`               // url of the original
+	ID    any            `json:"id"`             // a string or a number, returned as sent
+	Meta  map[string]any `json:"meta,omitempty"` // data of the caller, returned untouched in the result
+	Input string         `json:"input"`          // url of the original
 
 	// Output is the master playlist key (.m3u8); each rendition lives next
 	// to it in a folder named after its bitrate in kbit/s:
 	// <output folder>/<kbit>/index.m3u8, init.mp4, seg_NNNN.m4s
 	Output string `json:"output"`
 
-	Wave     string `json:"wave,omitempty"`     // waveform json key; empty — no waveform (and no Result.Waveform)
-	Metadata string `json:"metadata,omitempty"` // metadata json key; empty — not published
-	Analysis string `json:"analysis,omitempty"` // analysis json key; empty — not published
+	WavePath     string `json:"wave_path,omitempty"`     // waveform json key; empty — no waveform (and no Result.Waveform)
+	MetaPath     string `json:"meta_path,omitempty"`     // track metadata json key; empty — not published
+	AnalysisPath string `json:"analysis_path,omitempty"` // analysis json key; empty — not published
 
 	Key    []byte `json:"key,omitempty"`     // empty (clear HLS) or exactly 16 bytes; base64 in json
 	KeyURI string `json:"key_uri,omitempty"` // required with Key: key address for the player, e.g. skd://1001
@@ -116,19 +116,19 @@ func (a *Job) validateKeys() *code.Error {
 	}
 
 	// waveform
-	e = a.cleanKey("wave", &a.Wave, taken)
+	e = a.cleanKey("wave_path", &a.WavePath, taken)
 	if e != nil {
 		return e
 	}
 
 	// metadata
-	e = a.cleanKey("metadata", &a.Metadata, taken)
+	e = a.cleanKey("meta_path", &a.MetaPath, taken)
 	if e != nil {
 		return e
 	}
 
 	// analysis
-	return a.cleanKey("analysis", &a.Analysis, taken)
+	return a.cleanKey("analysis_path", &a.AnalysisPath, taken)
 }
 
 // cleanKey checks that key name is clean and not taken by another; an empty
