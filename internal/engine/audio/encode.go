@@ -2,7 +2,6 @@ package audio
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -22,15 +21,20 @@ type EncodeOptions struct {
 	SegmentSeconds int     // hls segment
 }
 
-// Output names inside the folder of a rendition.
-const (
-	PlaylistName = "index.m3u8"
-	InitName     = "init.mp4"
-	SegmentName  = "seg_%04d.m4s"
-)
+// PlaylistName — the media playlist inside the folder of a rendition.
+func (t Tools) PlaylistName() string {
+	return "index.m3u8"
+}
 
-// codecs — the CODECS attribute of AAC-LC in a master playlist.
-const codecs = "mp4a.40.2"
+// InitName — the fMP4 init segment inside the folder of a rendition.
+func (t Tools) InitName() string {
+	return "init.mp4"
+}
+
+// SegmentName — the media segment pattern inside the folder of a rendition.
+func (t Tools) SegmentName() string {
+	return "seg_%04d.m4s"
+}
 
 // EncodeHLS writes one rendition per bitrate into dir/<kbit>/:
 // index.m3u8, init.mp4 and seg_NNNN.m4s, the paths in the playlists
@@ -43,21 +47,29 @@ func (t Tools) EncodeHLS(ctx context.Context, in, dir string, o EncodeOptions) e
 	if err != nil {
 		return err
 	}
+
+	// filter graph: gain, format, one split output per bitrate;
 	// "<n>c" is the default layout of n channels, as -ac n picks it
 	graph := fmt.Sprintf("[0:a:0]volume=%.2fdB,aformat=sample_rates=%d:channel_layouts=%dc,asplit=%d", o.GainDB, o.SampleRate, o.Channels, len(o.Bitrates))
 	for i := range o.Bitrates {
 		graph += fmt.Sprintf("[a%d]", i)
 	}
+
 	args := []string{
 		"-nostdin", "-hide_banner", "-nostats", "-loglevel", "error", "-y",
 		"-i", abs,
 		"-filter_complex", graph,
 	}
+
+	// one encoder and hls muxer per rendition, each in its folder
 	for i, kbit := range o.Bitrates {
 		folder := strconv.Itoa(kbit)
-		if err := os.MkdirAll(filepath.Join(dir, folder), 0o755); err != nil {
+
+		err = os.MkdirAll(filepath.Join(dir, folder), 0o755)
+		if err != nil {
 			return err
 		}
+
 		args = append(args,
 			"-map", fmt.Sprintf("[a%d]", i), "-map_metadata", "-1",
 			"-c:a", "aac", "-profile:a", "aac_low", "-b:a", folder+"k",
@@ -65,13 +77,15 @@ func (t Tools) EncodeHLS(ctx context.Context, in, dir string, o EncodeOptions) e
 			"-hls_time", strconv.Itoa(o.SegmentSeconds),
 			"-hls_playlist_type", "vod",
 			"-hls_segment_type", "fmp4",
-			"-hls_fmp4_init_filename", InitName,
-			"-hls_segment_filename", filepath.Join(folder, SegmentName),
+			"-hls_fmp4_init_filename", t.InitName(),
+			"-hls_segment_filename", filepath.Join(folder, t.SegmentName()),
 			"-hls_flags", "independent_segments",
 			"-hls_list_size", "0",
-			filepath.Join(folder, PlaylistName),
+			filepath.Join(folder, t.PlaylistName()),
 		)
 	}
+
+	// run
 	_, _, err = t.run(ctx, dir, t.FFmpeg, args...)
 	return err
 }
@@ -85,12 +99,19 @@ type Variant struct {
 
 // Master — the master playlist of AAC-LC fMP4 variants in their order:
 // players start with the first one.
-func Master(variants []Variant) string {
+func (t Tools) Master(variants []Variant) string {
+	// the CODECS attribute of AAC-LC
+	codecs := "mp4a.40.2"
+
+	// header
 	var b strings.Builder
 	b.WriteString("#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-INDEPENDENT-SEGMENTS\n")
+
+	// variants
 	for _, v := range variants {
 		fmt.Fprintf(&b, "#EXT-X-STREAM-INF:BANDWIDTH=%d,AVERAGE-BANDWIDTH=%d,CODECS=\"%s\"\n%s\n", v.Bandwidth, v.AverageBandwidth, codecs, v.URI)
 	}
+
 	return b.String()
 }
 
@@ -111,15 +132,18 @@ type Segment struct {
 	Duration float64
 }
 
-// ErrPlaylist — playlist does not meet the requirements.
-var ErrPlaylist = errors.New("audio: invalid playlist")
-
 // ParsePlaylist — minimal m3u8 parser for the files ffmpeg writes.
-func ParsePlaylist(text string) (p Playlist, err error) {
+func (t Tools) ParsePlaylist(text string) (p Playlist, err error) {
+	// header
 	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
-	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "#EXTM3U" {
-		return p, fmt.Errorf("%w: missing #EXTM3U", ErrPlaylist)
+	switch {
+	case len(lines) == 0:
+		return p, fmt.Errorf("%w: missing #EXTM3U", t.ErrPlaylist())
+	case strings.TrimSpace(lines[0]) != "#EXTM3U":
+		return p, fmt.Errorf("%w: missing #EXTM3U", t.ErrPlaylist())
 	}
+
+	// tags and segments; a segment takes the duration of the EXTINF before it
 	var dur float64
 	haveInf := false
 	for _, raw := range lines[1:] {
@@ -135,11 +159,7 @@ func ParsePlaylist(text string) (p Playlist, err error) {
 		case line == "#EXT-X-INDEPENDENT-SEGMENTS":
 			p.Independent = true
 		case strings.HasPrefix(line, "#EXT-X-MAP:"):
-			for _, attr := range strings.Split(strings.TrimPrefix(line, "#EXT-X-MAP:"), ",") {
-				if k, v, ok := strings.Cut(attr, "="); ok && strings.TrimSpace(k) == "URI" {
-					p.Init = strings.Trim(strings.TrimSpace(v), `"`)
-				}
-			}
+			p.Init = p.mapURI(line, p.Init)
 		case strings.HasPrefix(line, "#EXTINF:"):
 			v, _, _ := strings.Cut(strings.TrimPrefix(line, "#EXTINF:"), ",")
 			dur, _ = strconv.ParseFloat(strings.TrimSpace(v), 64)
@@ -147,14 +167,31 @@ func ParsePlaylist(text string) (p Playlist, err error) {
 		case strings.HasPrefix(line, "#"):
 		default:
 			if !haveInf {
-				return p, fmt.Errorf("%w: segment %s without #EXTINF", ErrPlaylist, line)
+				return p, fmt.Errorf("%w: segment %s without #EXTINF", t.ErrPlaylist(), line)
 			}
+
 			p.Segments = append(p.Segments, Segment{Name: line, Duration: dur})
 			p.Duration += dur
 			haveInf = false
 		}
 	}
+
 	return p, nil
+}
+
+// mapURI — the URI attribute of an #EXT-X-MAP line; current when it has none.
+func (p Playlist) mapURI(line, current string) string {
+	for _, attr := range strings.Split(strings.TrimPrefix(line, "#EXT-X-MAP:"), ",") {
+		k, v, ok := strings.Cut(attr, "=")
+		if !ok {
+			continue
+		}
+
+		if strings.TrimSpace(k) == "URI" {
+			current = strings.Trim(strings.TrimSpace(v), `"`)
+		}
+	}
+	return current
 }
 
 // Bandwidth — peak and average bit rate of the segments in bit/s, from
@@ -162,6 +199,7 @@ func ParsePlaylist(text string) (p Playlist, err error) {
 // segment, the average all bytes over the whole duration; both rounded up.
 // Segments without a duration count for the average only.
 func (p Playlist) Bandwidth(sizes map[string]int64) (peak, average int) {
+	// total bytes and the densest segment
 	var total int64
 	for _, s := range p.Segments {
 		total += sizes[s.Name]
@@ -169,9 +207,12 @@ func (p Playlist) Bandwidth(sizes map[string]int64) (peak, average int) {
 			peak = max(peak, int(math.Ceil(float64(sizes[s.Name])*8/s.Duration)))
 		}
 	}
+
+	// average over the whole duration
 	if p.Duration > 0 {
 		average = int(math.Ceil(float64(total) * 8 / p.Duration))
 	}
+
 	return peak, average
 }
 
@@ -180,54 +221,72 @@ func (p Playlist) Bandwidth(sizes map[string]int64) (peak, average int) {
 // non-empty, total duration within tolerance of expectedSec, and the whole
 // stream decodes without errors. Returns the parsed playlist.
 func (t Tools) VerifyHLS(ctx context.Context, dir string, expectedSec float64) (p Playlist, err error) {
-	raw, err := os.ReadFile(filepath.Join(dir, PlaylistName))
+	// read and parse
+	raw, err := os.ReadFile(filepath.Join(dir, t.PlaylistName()))
 	if err != nil {
-		return p, fmt.Errorf("%w: %v", ErrPlaylist, err)
+		return p, fmt.Errorf("%w: %v", t.ErrPlaylist(), err)
 	}
-	if p, err = ParsePlaylist(string(raw)); err != nil {
+
+	p, err = t.ParsePlaylist(string(raw))
+	if err != nil {
 		return
 	}
+
+	// required tags
 	switch {
 	case !p.VOD:
-		return p, fmt.Errorf("%w: not VOD", ErrPlaylist)
+		return p, fmt.Errorf("%w: not VOD", t.ErrPlaylist())
 	case !p.EndList:
-		return p, fmt.Errorf("%w: no EXT-X-ENDLIST", ErrPlaylist)
+		return p, fmt.Errorf("%w: no EXT-X-ENDLIST", t.ErrPlaylist())
 	case p.Init == "":
-		return p, fmt.Errorf("%w: no EXT-X-MAP", ErrPlaylist)
-	case !relative(p.Init):
-		return p, fmt.Errorf("%w: init path is not relative", ErrPlaylist)
+		return p, fmt.Errorf("%w: no EXT-X-MAP", t.ErrPlaylist())
+	case !p.relative(p.Init):
+		return p, fmt.Errorf("%w: init path is not relative", t.ErrPlaylist())
 	case len(p.Segments) == 0:
-		return p, fmt.Errorf("%w: no segments", ErrPlaylist)
+		return p, fmt.Errorf("%w: no segments", t.ErrPlaylist())
 	}
-	for _, name := range append([]string{p.Init}, segmentNames(p)...) {
-		if !relative(name) {
-			return p, fmt.Errorf("%w: %s is not relative", ErrPlaylist, name)
+
+	// init and every segment: relative, present and non-empty
+	names := append([]string{p.Init}, p.segmentNames()...)
+	for _, name := range names {
+		if !p.relative(name) {
+			return p, fmt.Errorf("%w: %s is not relative", t.ErrPlaylist(), name)
 		}
+
 		info, err := os.Stat(filepath.Join(dir, name))
-		if err != nil || info.Size() == 0 {
-			return p, fmt.Errorf("%w: %s missing or empty", ErrPlaylist, name)
+		switch {
+		case err != nil:
+			return p, fmt.Errorf("%w: %s missing or empty", t.ErrPlaylist(), name)
+		case info.Size() == 0:
+			return p, fmt.Errorf("%w: %s missing or empty", t.ErrPlaylist(), name)
 		}
 	}
+
+	// total duration within tolerance
 	if expectedSec > 0 {
 		tol := math.Max(1.5, expectedSec*0.02)
 		if math.Abs(p.Duration-expectedSec) > tol {
-			return p, fmt.Errorf("%w: duration %.2fs, expected %.2fs", ErrPlaylist, p.Duration, expectedSec)
+			return p, fmt.Errorf("%w: duration %.2fs, expected %.2fs", t.ErrPlaylist(), p.Duration, expectedSec)
 		}
 	}
 
 	// decode the whole stream: any decoder error fails verification
 	_, stderr, err := t.run(ctx, dir, t.FFmpeg, "-nostdin", "-hide_banner", "-nostats", "-loglevel", "error",
-		"-i", PlaylistName, "-f", "null", "-")
+		"-i", t.PlaylistName(), "-f", "null", "-")
 	if err != nil {
-		return p, fmt.Errorf("%w: decode: %v", ErrPlaylist, err)
+		return p, fmt.Errorf("%w: decode: %v", t.ErrPlaylist(), err)
 	}
-	if s := strings.TrimSpace(string(stderr)); s != "" {
-		return p, fmt.Errorf("%w: decode: %s", ErrPlaylist, tail(s, 512))
+
+	s := strings.TrimSpace(string(stderr))
+	if s != "" {
+		return p, fmt.Errorf("%w: decode: %s", t.ErrPlaylist(), t.tail(s, 512))
 	}
+
 	return p, nil
 }
 
-func segmentNames(p Playlist) []string {
+// segmentNames — names of the segments in order.
+func (p Playlist) segmentNames() []string {
 	res := make([]string, 0, len(p.Segments))
 	for _, s := range p.Segments {
 		res = append(res, s.Name)
@@ -235,6 +294,17 @@ func segmentNames(p Playlist) []string {
 	return res
 }
 
-func relative(name string) bool {
-	return name != "" && !strings.HasPrefix(name, "/") && !strings.Contains(name, "://") && !strings.Contains(name, "..")
+// relative — name is a plain relative path inside the rendition folder.
+func (p Playlist) relative(name string) bool {
+	switch {
+	case name == "":
+		return false
+	case strings.HasPrefix(name, "/"):
+		return false
+	case strings.Contains(name, "://"):
+		return false
+	case strings.Contains(name, ".."):
+		return false
+	}
+	return true
 }

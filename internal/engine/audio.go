@@ -323,7 +323,7 @@ func (a *audioRun) analyze(ctx context.Context) *code.Error {
 
 	// no sample above the floor: digital silence for the whole track, or no
 	// samples at all: nothing to encode and publish
-	if res.Loudness.SamplePeak <= audiotool.LevelFloor {
+	if res.Loudness.SamplePeak <= a.engine.audio.LevelFloor() {
 		return code.New(code.InvalidAudio, "track is silent", nil)
 	}
 
@@ -413,7 +413,7 @@ func (a *audioRun) normalize(ctx context.Context) *code.Error {
 		return nil
 	}
 
-	gain, limited := audiotool.ComputeGain(a.analysis.Loudness, o.LUFS, o.TruePeak)
+	gain, limited := a.engine.audio.ComputeGain(a.analysis.Loudness, o.LUFS, o.TruePeak)
 	a.gain = gain
 	a.analysis.Loudness.Gain = gain
 	a.analysis.Loudness.GainLimited = limited
@@ -499,7 +499,7 @@ func (a *audioRun) rendition(ctx context.Context, dir string, kbit int) *code.Er
 // measure takes the loudness of what the listener hears first: the first variant,
 // the player starts with it; the rest are the same signal at another bitrate
 func (a *audioRun) measure(ctx context.Context) {
-	first := filepath.Join(a.renditions[0].dir, audiotool.PlaylistName)
+	first := filepath.Join(a.renditions[0].dir, a.engine.audio.PlaylistName())
 
 	out, err := a.engine.audio.Analyze(ctx, first, audiotool.AnalyzeOptions{})
 	if err != nil {
@@ -532,7 +532,7 @@ func (a *audioRun) waveform(ctx context.Context) *code.Error {
 		return code.New(code.InternalTemporaryError, "pcm missing", err)
 	}
 
-	w, err := audiotool.BuildWaveform(f, a.meta.SampleRate, o.WaveformPPS, a.gain)
+	w, err := a.engine.audio.BuildWaveform(f, a.meta.SampleRate, o.WaveformPPS, a.gain)
 	f.Close()
 	os.Remove(pcm)
 	if err != nil {
@@ -597,7 +597,7 @@ func (a *audioRun) upload(ctx context.Context) *code.Error {
 	}
 
 	// master last: whoever sees it sees the complete set
-	master := upload{key: a.job.Output, data: []byte(audiotool.Master(variants))}
+	master := upload{key: a.job.Output, data: []byte(a.engine.audio.Master(variants))}
 	e = a.putAll(ctx, []upload{master})
 	if e != nil {
 		return e
@@ -617,7 +617,7 @@ func (a *audioRun) playlists() ([]upload, []audiotool.Variant, *code.Error) {
 		r := &a.renditions[i]
 
 		// ffmpeg text
-		text, err := os.ReadFile(filepath.Join(r.dir, audiotool.PlaylistName))
+		text, err := os.ReadFile(filepath.Join(r.dir, a.engine.audio.PlaylistName()))
 		if err != nil {
 			return nil, nil, code.New(code.InternalTemporaryError, "playlist missing", err)
 		}
@@ -646,11 +646,11 @@ func (a *audioRun) playlists() ([]upload, []audiotool.Variant, *code.Error) {
 			Size:             size,
 		})
 		variants = append(variants, audiotool.Variant{
-			URI:              r.folder + "/" + audiotool.PlaylistName,
+			URI:              r.folder + "/" + a.engine.audio.PlaylistName(),
 			Bandwidth:        peak,
 			AverageBandwidth: average,
 		})
-		lists = append(lists, upload{key: path.Join(r.key, audiotool.PlaylistName), data: text})
+		lists = append(lists, upload{key: path.Join(r.key, a.engine.audio.PlaylistName()), data: text})
 	}
 
 	return lists, variants, nil
@@ -702,7 +702,7 @@ func (a *audioRun) verify(ctx context.Context) *code.Error {
 	for _, r := range a.renditions {
 		segments := r.playlist.Segments
 		required = append(required,
-			path.Join(r.key, audiotool.PlaylistName),
+			path.Join(r.key, a.engine.audio.PlaylistName()),
 			path.Join(r.key, r.playlist.Init),
 			path.Join(r.key, segments[0].Name),
 			path.Join(r.key, segments[len(segments)-1].Name),

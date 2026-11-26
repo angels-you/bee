@@ -96,7 +96,7 @@ func TestAnalyzeAndGain(t *testing.T) {
 	if a.Loudness.TruePeak > -15 || a.Loudness.TruePeak < -25 {
 		t.Errorf("quiet true peak %.1f", a.Loudness.TruePeak)
 	}
-	gain, limited := ComputeGain(a.Loudness, -14, -1.5)
+	gain, limited := bins.ComputeGain(a.Loudness, -14, -1.5)
 	if gain <= 0 || limited {
 		t.Errorf("quiet gain %.2f limited %v", gain, limited)
 	}
@@ -122,7 +122,7 @@ func TestAnalyzeAndGain(t *testing.T) {
 	if b.Loudness.TruePeak < -4 {
 		t.Errorf("loud true peak %.1f", b.Loudness.TruePeak)
 	}
-	gain, limited = ComputeGain(b.Loudness, -14, -1.5)
+	gain, limited = bins.ComputeGain(b.Loudness, -14, -1.5)
 	if gain >= 0 {
 		t.Errorf("loud gain %.2f must be negative", gain)
 	}
@@ -136,7 +136,7 @@ func TestAnalyzeAndGain(t *testing.T) {
 	if err := tools.EncodeHLS(ctx(t), loud, hls, EncodeOptions{GainDB: gain, Bitrates: []int{128}, SampleRate: 44100, Channels: 2, SegmentSeconds: 6}); err != nil {
 		t.Fatal(err)
 	}
-	out, err := tools.Analyze(ctx(t), filepath.Join(hls, "128", PlaylistName), AnalyzeOptions{})
+	out, err := tools.Analyze(ctx(t), filepath.Join(hls, "128", tools.PlaylistName()), AnalyzeOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,11 +157,11 @@ func TestComputeGain(t *testing.T) {
 		{Loudness{Integrated: -24, TruePeak: -12}, 10, false},
 		{Loudness{Integrated: -24, TruePeak: -5}, 3.5, true},
 		{Loudness{Integrated: -8, TruePeak: 0}, -6, false},
-		{Loudness{Integrated: LoudnessFloor, TruePeak: LevelFloor}, 0, false},
+		{Loudness{Integrated: bins.LoudnessFloor(), TruePeak: bins.LevelFloor()}, 0, false},
 		{Loudness{Integrated: -70, TruePeak: -60}, 0, false},
 	}
 	for _, c := range cases {
-		g, l := ComputeGain(c.in, -14, -1.5)
+		g, l := bins.ComputeGain(c.in, -14, -1.5)
 		if g != c.gain || l != c.limited {
 			t.Errorf("%+v: gain %.2f limited %v, want %.2f %v", c.in, g, l, c.gain, c.limited)
 		}
@@ -187,14 +187,14 @@ func TestParseEBUR128(t *testing.T) {
   True peak:
     Peak:       -2.9 dBFS
 `)
-	l, err := parseEBUR128(stderr)
+	l, err := bins.parseEBUR128(stderr)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if l.Integrated != -23.4 || l.Threshold != -33.5 || l.LRA != 6.2 || l.SamplePeak != -3.1 || l.TruePeak != -2.9 {
 		t.Errorf("%+v", l)
 	}
-	if _, err := parseEBUR128([]byte("nothing")); err == nil {
+	if _, err := bins.parseEBUR128([]byte("nothing")); err == nil {
 		t.Error("missing summary must fail")
 	}
 
@@ -215,11 +215,11 @@ func TestParseEBUR128(t *testing.T) {
   True peak:
     Peak:       -inf dBFS
 `)
-	l, err = parseEBUR128(silent)
+	l, err = bins.parseEBUR128(silent)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if l.Integrated != LoudnessFloor || l.Threshold != LoudnessFloor || l.LRA != 0 || l.SamplePeak != LevelFloor || l.TruePeak != LevelFloor {
+	if l.Integrated != bins.LoudnessFloor() || l.Threshold != bins.LoudnessFloor() || l.LRA != 0 || l.SamplePeak != bins.LevelFloor() || l.TruePeak != bins.LevelFloor() {
 		t.Errorf("silent %+v", l)
 	}
 	if _, err := json.Marshal(l); err != nil {
@@ -247,7 +247,7 @@ func TestParseQuality(t *testing.T) {
 [Parsed_astats_1 @ 0x2] Flat factor: 1.500000
 [silencedetect @ 0x1] silence_start: 8
 `)
-	q, rms := parseQuality(stderr, 10)
+	q, rms := bins.parseQuality(stderr, 10)
 	if rms != -13 {
 		t.Errorf("rms %.1f", rms)
 	}
@@ -276,8 +276,8 @@ func TestParseQuality(t *testing.T) {
 [Parsed_astats_1 @ 0x2] RMS level dB: -inf
 [Parsed_astats_1 @ 0x2] Flat factor: -inf
 `)
-	q, rms = parseQuality(stderr, 10)
-	if rms != LevelFloor || q.FlatFactor != LevelFloor || q.ChannelRMS[1] != LevelFloor || q.ChannelImbalance != -21-LevelFloor || q.Clipping {
+	q, rms = bins.parseQuality(stderr, 10)
+	if rms != bins.LevelFloor() || q.FlatFactor != bins.LevelFloor() || q.ChannelRMS[1] != bins.LevelFloor() || q.ChannelImbalance != -21-bins.LevelFloor() || q.Clipping {
 		t.Errorf("silent channel: rms %.1f %+v", rms, q)
 	}
 	if _, err := json.Marshal(q); err != nil {
@@ -326,7 +326,7 @@ func TestEncodeAndVerify(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s %d: %v", o.Name, kbit, err)
 			}
-			if p.Init != InitName || !p.VOD || !p.EndList {
+			if p.Init != tools.InitName() || !p.VOD || !p.EndList {
 				t.Errorf("%s %d: playlist %+v", o.Name, kbit, p)
 			}
 			want := int(math.Ceil(o.Seconds / 6))
@@ -347,7 +347,7 @@ func TestEncodeAndVerify(t *testing.T) {
 			} else if !slices.Equal(p.Segments, first.Segments) {
 				t.Errorf("%s: segments of %d %+v differ from %d %+v", o.Name, kbit, p.Segments, bitrates[0], first.Segments)
 			}
-			m, err := tools.Probe(ctx(t), filepath.Join(rendition, PlaylistName))
+			m, err := tools.Probe(ctx(t), filepath.Join(rendition, tools.PlaylistName()))
 			if err != nil {
 				t.Fatalf("%s %d: probe hls: %v", o.Name, kbit, err)
 			}
@@ -355,7 +355,7 @@ func TestEncodeAndVerify(t *testing.T) {
 				t.Errorf("%s %d: hls stream %s %d %d", o.Name, kbit, m.Codec, m.SampleRate, m.Channels)
 			}
 			// audio only, embedded art never reaches the stream
-			streams, _, err = tools.run(ctx(t), rendition, tools.FFprobe, "-v", "error", "-show_entries", "format=nb_streams", "-of", "csv=p=0", PlaylistName)
+			streams, _, err = tools.run(ctx(t), rendition, tools.FFprobe, "-v", "error", "-show_entries", "format=nb_streams", "-of", "csv=p=0", tools.PlaylistName())
 			if err != nil || strings.TrimSpace(string(streams)) != "1" {
 				t.Errorf("%s %d: hls has %q streams: %v", o.Name, kbit, streams, err)
 			}
@@ -376,7 +376,7 @@ func TestBandwidth(t *testing.T) {
 // TestMaster — header, then the variants in the given order with their
 // bandwidths, the AAC-LC codec and relative uris
 func TestMaster(t *testing.T) {
-	got := Master([]Variant{{"128/index.m3u8", 140000, 131000}, {"64/index.m3u8", 70000, 66000}})
+	got := bins.Master([]Variant{{"128/index.m3u8", 140000, 131000}, {"64/index.m3u8", 70000, 66000}})
 	want := "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-INDEPENDENT-SEGMENTS\n" +
 		"#EXT-X-STREAM-INF:BANDWIDTH=140000,AVERAGE-BANDWIDTH=131000,CODECS=\"mp4a.40.2\"\n128/index.m3u8\n" +
 		"#EXT-X-STREAM-INF:BANDWIDTH=70000,AVERAGE-BANDWIDTH=66000,CODECS=\"mp4a.40.2\"\n64/index.m3u8\n"
@@ -395,14 +395,14 @@ func pad4(i int) string {
 
 func TestParsePlaylist(t *testing.T) {
 	good := "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:4\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:4.000000,\nseg_0000.m4s\n#EXTINF:1.500000,\nseg_0001.m4s\n#EXT-X-ENDLIST\n"
-	p, err := ParsePlaylist(good)
+	p, err := bins.ParsePlaylist(good)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if p.Init != "init.mp4" || len(p.Segments) != 2 || math.Abs(p.Duration-5.5) > 1e-6 || !p.EndList || !p.VOD || !p.Independent {
 		t.Errorf("%+v", p)
 	}
-	if _, err := ParsePlaylist("garbage"); err == nil {
+	if _, err := bins.ParsePlaylist("garbage"); err == nil {
 		t.Error("bad header must fail")
 	}
 }
@@ -420,7 +420,7 @@ func TestWaveform(t *testing.T) {
 		}
 		binary.Write(&buf, binary.LittleEndian, math.Float32bits(v))
 	}
-	w, err := BuildWaveform(&buf, 1000, 10, 6) // +6 dB ≈ ×2
+	w, err := bins.BuildWaveform(&buf, 1000, 10, 6) // +6 dB ≈ ×2
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -442,7 +442,7 @@ func TestWaveform(t *testing.T) {
 		t.Errorf("downsample %+v", d)
 	}
 
-	if _, err := BuildWaveform(bytes.NewReader(nil), 1000, 10, 0); err == nil {
+	if _, err := bins.BuildWaveform(bytes.NewReader(nil), 1000, 10, 0); err == nil {
 		t.Error("empty pcm must fail")
 	}
 }

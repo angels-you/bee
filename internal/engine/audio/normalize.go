@@ -10,19 +10,25 @@ import "math"
 // Silence or a nearly silent input (below -60 LUFS, LoudnessFloor
 // included) gets gain 0. The values of l are finite, as Analyze measures
 // them.
-func ComputeGain(l Loudness, targetLUFS, maxTruePeak float64) (gain float64, limited bool) {
+func (t Tools) ComputeGain(l Loudness, targetLUFS, maxTruePeak float64) (gain float64, limited bool) {
+	// nearly silent: no gain
 	if l.Integrated < -60 {
 		return 0, false
 	}
+
+	// gain to the target
 	gain = targetLUFS - l.Integrated
+
+	// the true peak ceiling wins over the target
 	if l.TruePeak+gain > maxTruePeak {
 		gain = maxTruePeak - l.TruePeak
 		limited = true
 	}
-	return math.Round(gain*100) / 100, limited
+
+	return t.round2(gain), limited
 }
 
 // GainLinear — dB → amplitude factor.
-func GainLinear(db float64) float64 {
+func (t Tools) GainLinear(db float64) float64 {
 	return math.Pow(10, db/20)
 }

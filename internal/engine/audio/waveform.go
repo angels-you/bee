@@ -23,73 +23,114 @@ type Waveform struct {
 	RMS        []float32 `json:"rms"`
 }
 
-// ErrNoPCM — empty input.
-var ErrNoPCM = errors.New("audio: no pcm samples")
+// waveBucket — the bucket BuildWaveform is filling.
+type waveBucket struct {
+	lo    float32
+	hi    float32
+	sumsq float64
+	n     int
+}
+
+// reset — an empty bucket.
+func (b *waveBucket) reset() {
+	b.lo = 1
+	b.hi = -1
+	b.sumsq = 0
+	b.n = 0
+}
+
+// add — one sample into the bucket.
+func (b *waveBucket) add(v float32) {
+	if v < b.lo {
+		b.lo = v
+	}
+	if v > b.hi {
+		b.hi = v
+	}
+	b.sumsq += float64(v) * float64(v)
+	b.n++
+}
 
 // BuildWaveform reads mono float32 little-endian PCM at sampleRate,
 // applies gainDB and folds it into pointsPerSecond buckets. Values beyond
 // full scale after gain are clamped.
-func BuildWaveform(r io.Reader, sampleRate, pointsPerSecond int, gainDB float64) (w Waveform, err error) {
-	if sampleRate <= 0 || pointsPerSecond <= 0 {
+func (t Tools) BuildWaveform(r io.Reader, sampleRate, pointsPerSecond int, gainDB float64) (w Waveform, err error) {
+	// rates must be positive
+	switch {
+	case sampleRate <= 0:
+		return w, errors.New("audio: sample rate and points per second must be positive")
+	case pointsPerSecond <= 0:
 		return w, errors.New("audio: sample rate and points per second must be positive")
 	}
-	bucket := sampleRate / pointsPerSecond
-	if bucket < 1 {
-		bucket = 1
+
+	// samples per bucket and gain factor
+	size := sampleRate / pointsPerSecond
+	if size < 1 {
+		size = 1
 	}
-	gain := float32(GainLinear(gainDB))
+	gain := float32(t.GainLinear(gainDB))
 
 	w.Version = 1
 	w.SampleRate = pointsPerSecond
 	w.Channels = 1
 
+	// read sample by sample, flush every full bucket
 	br := bufio.NewReaderSize(r, 256*1024)
-	var (
-		buf     [4]byte
-		n       int
-		total   int64
-		lo, hi  float32 = 1, -1
-		sumsq   float64
-		flushed = func() {
-			w.Min = append(w.Min, clamp(lo))
-			w.Max = append(w.Max, clamp(hi))
-			w.RMS = append(w.RMS, clamp(float32(math.Sqrt(sumsq/float64(n)))))
-			lo, hi, sumsq, n = 1, -1, 0, 0
-		}
-	)
+	var buf [4]byte
+	var total int64
+	var bucket waveBucket
+	bucket.reset()
+
 	for {
-		if _, err = io.ReadFull(br, buf[:]); err != nil {
-			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		_, err = io.ReadFull(br, buf[:])
+		if err != nil {
+			// end of input, a partial sample is dropped
+			switch {
+			case errors.Is(err, io.EOF):
 				err = nil
-				break
+			case errors.Is(err, io.ErrUnexpectedEOF):
+				err = nil
+			default:
+				return
 			}
-			return
+			break
 		}
+
 		v := math.Float32frombits(binary.LittleEndian.Uint32(buf[:])) * gain
-		if v < lo {
-			lo = v
-		}
-		if v > hi {
-			hi = v
-		}
-		sumsq += float64(v) * float64(v)
-		n++
+		bucket.add(v)
 		total++
-		if n == bucket {
-			flushed()
+
+		if bucket.n == size {
+			t.flush(&w, &bucket)
 		}
 	}
-	if n > 0 {
-		flushed()
+
+	// the last partial bucket
+	if bucket.n > 0 {
+		t.flush(&w, &bucket)
 	}
+
 	if total == 0 {
-		return w, ErrNoPCM
+		return w, t.ErrNoPCM()
 	}
+
 	w.DurationMs = int64(math.Round(float64(total) * 1000 / float64(sampleRate)))
 	return w, nil
 }
 
-func clamp(v float32) float32 {
+// flush — appends the bucket to the waveform, clamped, and empties it.
+func (t Tools) flush(w *Waveform, b *waveBucket) {
+	rms := float32(math.Sqrt(b.sumsq / float64(b.n)))
+
+	w.Min = append(w.Min, t.clamp(b.lo))
+	w.Max = append(w.Max, t.clamp(b.hi))
+	w.RMS = append(w.RMS, t.clamp(rms))
+
+	b.reset()
+}
+
+// clamp — v within [-1, 1]; NaN → 0.
+func (t Tools) clamp(v float32) float32 {
 	switch {
 	case v > 1:
 		return 1
@@ -106,30 +147,42 @@ func clamp(v float32) float32 {
 // thumbnails without touching the audio again.
 func (w Waveform) Downsample(points int) Waveform {
 	n := len(w.Min)
-	if points <= 0 || points >= n {
+	switch {
+	case points <= 0:
+		return w
+	case points >= n:
 		return w
 	}
+
+	// buckets per second of the result
 	res := Waveform{Version: w.Version, DurationMs: w.DurationMs, Channels: w.Channels}
-	res.SampleRate = int(math.Round(float64(points) * 1000 / float64(max64(w.DurationMs, 1))))
+	res.SampleRate = int(math.Round(float64(points) * 1000 / float64(max(w.DurationMs, 1))))
 	if res.SampleRate < 1 {
 		res.SampleRate = 1
 	}
+
+	// merge the buckets [from, to) of each point
 	for i := 0; i < points; i++ {
-		from, to := i*n/points, (i+1)*n/points
+		from := i * n / points
+		to := (i + 1) * n / points
 		if to <= from {
 			to = from + 1
 		}
-		lo, hi := float32(1), float32(-1)
+
+		lo := float32(1)
+		hi := float32(-1)
 		var sumsq float64
 		for j := from; j < to; j++ {
-			lo = minf(lo, w.Min[j])
-			hi = maxf(hi, w.Max[j])
+			lo = w.minf(lo, w.Min[j])
+			hi = w.maxf(hi, w.Max[j])
 			sumsq += float64(w.RMS[j]) * float64(w.RMS[j])
 		}
+
 		res.Min = append(res.Min, lo)
 		res.Max = append(res.Max, hi)
 		res.RMS = append(res.RMS, float32(math.Sqrt(sumsq/float64(to-from))))
 	}
+
 	return res
 }
 
@@ -145,35 +198,37 @@ func (w Waveform) Peaks(points int) []byte {
 	if n == 0 {
 		return out
 	}
+
 	for i := range out {
-		from, to := i*n/points, (i+1)*n/points
+		// buckets of the point, at least one
+		from := i * n / points
+		to := (i + 1) * n / points
 		if to <= from {
 			to = from + 1
 		}
+
+		// the largest absolute peak
 		var amp float32
 		for j := from; j < to; j++ {
-			amp = maxf(amp, maxf(-w.Min[j], w.Max[j]))
+			amp = w.maxf(amp, w.maxf(-w.Min[j], w.Max[j]))
 		}
+
 		out[i] = byte(math.Round(float64(amp) * 255))
 	}
+
 	return out
 }
 
-func minf(a, b float32) float32 {
+// minf — the smaller of a and b; b when they do not compare.
+func (w Waveform) minf(a, b float32) float32 {
 	if a < b {
 		return a
 	}
 	return b
 }
 
-func maxf(a, b float32) float32 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func max64(a, b int64) int64 {
+// maxf — the larger of a and b; b when they do not compare.
+func (w Waveform) maxf(a, b float32) float32 {
 	if a > b {
 		return a
 	}
