@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/angels-you/bee/pkg/proto"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -45,7 +46,7 @@ type Engine struct {
 	ledger  Ledger
 	log     *slog.Logger
 	slots   chan struct{}
-	down    map[string]*storage.Downloader // по типу job: у каждого свой лимит размера
+	down    map[proto.Kind]*storage.Downloader // по типу job: у каждого свой лимит размера
 
 	audio  audiotool.Tools
 	video  *videotool.Tools
@@ -151,11 +152,11 @@ func (a *Engine) tools() error {
 func (a *Engine) downloaders() {
 	cfg := a.cfg
 
-	a.down = map[string]*storage.Downloader{
-		"audio":  a.downloader(cfg.Audio.MaxSourceMB),
-		"stream": a.downloader(cfg.Video.MaxSourceMB),
-		"video":  a.downloader(cfg.Video.MaxSourceMB),
-		"images": a.downloader(cfg.Images.MaxSourceMB),
+	a.down = map[proto.Kind]*storage.Downloader{
+		proto.Audio:  a.downloader(cfg.Audio.MaxSourceMB),
+		proto.Stream: a.downloader(cfg.Video.MaxSourceMB),
+		proto.Video:  a.downloader(cfg.Video.MaxSourceMB),
+		proto.Images: a.downloader(cfg.Images.MaxSourceMB),
 	}
 }
 

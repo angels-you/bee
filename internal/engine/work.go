@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/angels-you/bee/pkg/proto"
 	"log/slog"
 	"net"
 	"os"
@@ -44,12 +45,12 @@ type work struct {
 }
 
 // newWork — состояние job, она посчитана как принятая
-func (a *Engine) newWork(kind, id, input string) *work {
-	a.Metrics.started(kind)
+func (a *Engine) newWork(kind proto.Kind, id, input string) *work {
+	a.Metrics.started(string(kind))
 
 	return &work{
 		engine: a,
-		kind:   kind,
+		kind:   string(kind),
 		id:     id,
 		input:  input,
 		start:  time.Now(),
@@ -97,7 +98,7 @@ func (a *work) fetch(ctx context.Context, field, rawURL, name string) (string, s
 
 	// скачиваем
 	file := filepath.Join(a.dir, name)
-	info, err := a.engine.down[a.kind].Download(a.downloads, rawURL, file)
+	info, err := a.engine.down[proto.Kind(a.kind)].Download(a.downloads, rawURL, file)
 	if err == nil {
 		a.downloaded += info.Size
 		a.engine.Metrics.transferred(info.Size, 0)

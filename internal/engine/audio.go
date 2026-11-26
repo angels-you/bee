@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/angels-you/bee/pkg/proto"
 	"math"
 	"os"
 	"path"
@@ -51,7 +52,7 @@ type audioRendition struct {
 // последним → проверка. Упавшая job возвращает Result с Error и тот же
 // *code.Error как ошибку
 func (a *Engine) Audio(ctx context.Context, j audio.Job) (audio.Result, error) {
-	r := &audioRun{work: a.newWork("audio", j.ID, j.Input), job: j}
+	r := &audioRun{work: a.newWork(proto.Audio, j.ID, j.Input), job: j}
 	r.res.ID = j.ID
 	r.res.Metrics = map[string]int64{}
 

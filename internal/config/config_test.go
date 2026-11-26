@@ -58,6 +58,7 @@ func (a *fixture) minimal() {
 		"BEE_STORAGE", "local",
 		"BEE_LOCAL_DIR", a.t.TempDir(),
 		"BEE_HTTP_ADDR", ":8080",
+		"BEE_TOKEN", "secret",
 	)
 }
 
@@ -163,6 +164,7 @@ func TestRequired(t *testing.T) {
 		"BEE_STORAGE", "s3",
 		"BEE_S3_PROVIDER", "nope",
 		"BEE_GRPC_ADDR", ":9090",
+		"BEE_TOKEN", "secret",
 	)
 
 	_, err = Load()
@@ -238,6 +240,7 @@ func TestEnvFile(t *testing.T) {
 	want.Storage.Kind = "local"
 	want.Storage.Local.Dir = "/data/out"
 	want.HTTP.Addr = ":8080"
+	want.Token = "change-me"
 
 	// пустой список из файла и nil из defaults — одно и то же
 	if len(c.SourceHosts) == 0 {
@@ -271,5 +274,42 @@ func TestSourceHostAllowed(t *testing.T) {
 		if c.SourceHostAllowed(host) != want {
 			t.Errorf("%s: want %v", host, want)
 		}
+	}
+}
+
+// TestToken — http and grpc never run without a token; nats alone needs
+// none; the health server always has an address.
+func TestToken(t *testing.T) {
+	f := fixture{}
+	f.init(t)
+	f.set(
+		"BEE_STORAGE", "local",
+		"BEE_LOCAL_DIR", t.TempDir(),
+		"BEE_GRPC_ADDR", ":9090",
+	)
+
+	// grpc without a token
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "BEE_TOKEN is required") {
+		t.Errorf("grpc without a token: %v", err)
+	}
+
+	// nats alone
+	os.Unsetenv("BEE_GRPC_ADDR")
+	f.set("BEE_NATS_URL", "nats://localhost:4222")
+
+	c, err := Load()
+	switch {
+	case err != nil:
+		t.Fatalf("nats without a token: %v", err)
+	case c.Health.Addr != ":8081":
+		t.Errorf("health addr %q", c.Health.Addr)
+	}
+
+	// a bad nats name
+	f.set("BEE_NATS_NAME", "Bee.1")
+	_, err = Load()
+	if err == nil || !strings.Contains(err.Error(), "BEE_NATS_NAME") {
+		t.Errorf("bad nats name: %v", err)
 	}
 }

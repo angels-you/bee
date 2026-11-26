@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -72,6 +73,18 @@ func (a *NATS) defaults() {
 
 // validate — поля включённого nats в своих пределах
 func (a *NATS) validate() (errs []error) {
+	// the name goes into stream names and subjects: a-z, 0-9, _ and -
+	for _, r := range a.Name {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= '0' && r <= '9':
+		case r == '_', r == '-':
+		default:
+			errs = append(errs, fmt.Errorf("config: BEE_NATS_NAME %q may hold only a-z, 0-9, _ and -", a.Name))
+			return
+		}
+	}
+
 	if a.Name == "" {
 		errs = append(errs, errors.New("config: BEE_NATS_NAME is required"))
 	}
@@ -111,4 +124,15 @@ func (a *NATS) validate() (errs []error) {
 	}
 
 	return
+}
+
+// Health is the health server: liveness, readiness and metrics, always
+// on, without a token.
+type Health struct {
+	Addr string `env:"ADDR"` // :8081
+}
+
+// defaults is the port of the health server.
+func (a *Health) defaults() {
+	a.Addr = ":8081"
 }

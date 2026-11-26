@@ -34,6 +34,7 @@ type Config struct {
 	Audio   Audio  `prefix:"AUDIO_"`
 	Video   Video  `prefix:"VIDEO_"`
 	Images  Images `prefix:"IMAGES_"`
+	Health  Health `prefix:"HEALTH_"`
 	HTTP    HTTP   `prefix:"HTTP_"`
 	GRPC    GRPC   `prefix:"GRPC_"`
 	NATS    NATS   `prefix:"NATS_"`
@@ -92,6 +93,7 @@ func (a *Config) defaults() {
 	a.Video.defaults()
 	a.Images.defaults()
 	a.NATS.defaults()
+	a.Health.defaults()
 }
 
 // validate — все поля в своих пределах; все ошибки сразу, по строке на
@@ -162,6 +164,18 @@ func (a *Config) validateTransports() (errs []error) {
 
 	if a.NATS.Enabled() {
 		errs = append(errs, a.NATS.validate()...)
+	}
+
+	// http and grpc are never open: they need the token
+	if a.HTTP.Enabled() || a.GRPC.Enabled() {
+		if a.Token == "" {
+			errs = append(errs, errors.New("config: BEE_TOKEN is required with BEE_HTTP_ADDR or BEE_GRPC_ADDR"))
+		}
+	}
+
+	// the health server always runs
+	if a.Health.Addr == "" {
+		errs = append(errs, errors.New("config: BEE_HEALTH_ADDR is required"))
 	}
 
 	return

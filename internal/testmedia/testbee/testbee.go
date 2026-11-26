@@ -291,6 +291,7 @@ func (a *Bench) config() *config.Config {
 	c.UploadConcurrency = 4
 	c.Tools.Fpcalc = ""
 	c.HTTP.Addr = "127.0.0.1:0"
+	c.Token = "test-token"
 
 	c.Audio.Timeout = 2 * time.Minute
 	c.Audio.MinDuration = 500 * time.Millisecond

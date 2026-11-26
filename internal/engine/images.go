@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"github.com/angels-you/bee/pkg/proto"
 	"os"
 	"path/filepath"
 	"slices"
@@ -31,7 +32,7 @@ type imagesRun struct {
 // перезаписывает. Упавшая job возвращает Result с Error и тот же
 // *code.Error как ошибку
 func (a *Engine) Images(ctx context.Context, j images.Job) (images.Result, error) {
-	r := &imagesRun{work: a.newWork("images", j.ID, j.Input), job: j}
+	r := &imagesRun{work: a.newWork(proto.Images, j.ID, j.Input), job: j}
 
 	// проверка на копии: job вызывающего не меняется
 	r.job.Tasks = slices.Clone(j.Tasks)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/angels-you/bee/pkg/proto"
 	"os"
 	"path"
 	"path/filepath"
@@ -54,7 +55,7 @@ type videoRendition struct {
 
 // Stream — одна HLS job (см. process)
 func (a *Engine) Stream(ctx context.Context, j video.Stream) (video.Result, error) {
-	r := &videoRun{work: a.newWork("stream", j.ID, j.Input)}
+	r := &videoRun{work: a.newWork(proto.Stream, j.ID, j.Input)}
 
 	// проверка на копии: job вызывающего не меняется
 	check := videoCheck{cfg: a.cfg}
@@ -74,7 +75,7 @@ func (a *Engine) Stream(ctx context.Context, j video.Stream) (video.Result, erro
 
 // Video — одна job с одним MP4 (см. process)
 func (a *Engine) Video(ctx context.Context, j video.Video) (video.Result, error) {
-	r := &videoRun{work: a.newWork("video", j.ID, j.Input)}
+	r := &videoRun{work: a.newWork(proto.Video, j.ID, j.Input)}
 
 	// проверка на копии: job вызывающего не меняется
 	check := videoCheck{cfg: a.cfg}
