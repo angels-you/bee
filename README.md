@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/beelogo.svg" alt="bee" width="200"></p>
+<p align="center"><img src="docs/beelogo.svg" alt="bee" width="400"></p>
 
 # bee
 
@@ -120,7 +120,7 @@ for _, t := range res.Tasks {
 
 Runnable programs: [examples/http](examples/http/main.go), [examples/grpc](examples/grpc/main.go), [examples/nats](examples/nats/main.go).
 
-Job ids are 1..128 characters of `A-Z a-z 0-9 _ -`. Audio and video refuse an output that is already published (`ALREADY_EXISTS`: a new run needs new keys), except a NATS redelivery of the same job, which gets its saved result back. Images overwrite existing keys.
+Job ids are 1..128 characters of `A-Z a-z 0-9 _ -`. Every job that arrives runs and writes over whatever lies at its output keys, on every transport (a NATS redelivery runs it again); choosing free keys is up to you.
 
 ## Transports
 
@@ -149,3 +149,5 @@ The job and the result are the same JSON on every transport. gRPC carries that J
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+Copyright (c) 2026 [Music Angels](https://angels.you), dev@angels.you

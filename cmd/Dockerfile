@@ -57,6 +57,15 @@ COPY --from=build /out/bee /usr/local/bin/bee
 ARG VERSION=dev
 ENV BEE_VERSION=$VERSION PATH=/usr/local/bin:/usr/bin
 
+# who made the image and under which license
+LABEL org.opencontainers.image.title="bee" \
+      org.opencontainers.image.description="Media worker: audio, video and images to local or S3 storage" \
+      org.opencontainers.image.vendor="Music Angels" \
+      org.opencontainers.image.authors="Music Angels <dev@angels.you>" \
+      org.opencontainers.image.url="https://angels.you" \
+      org.opencontainers.image.source="https://github.com/angels-you/bee" \
+      org.opencontainers.image.licenses="MIT"
+
 # the defaults of every BEE_* key live in the code (internal/config):
 # the image sets none of them
 USER 10001:10001

@@ -140,3 +140,7 @@ This is the HLS AES-128 method, not CMAF CENC/CBCS DRM.
 - Secrets (`BEE_TOKEN`, `BEE_S3_SECRET`, `BEE_NATS_TOKEN`) come only from
   the environment. The start log shows the storage provider, bucket and
   prefix, never keys or tokens.
+
+## Reporting a vulnerability
+
+Write to dev@angels.you instead of opening a public issue.

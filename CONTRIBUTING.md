@@ -9,3 +9,5 @@ Thanks for helping with bee.
 - Comments, messages and docs are in English.
 
 By contributing you agree that your contribution is licensed under the MIT license of this repository.
+
+Questions: dev@angels.you. bee is made by [Music Angels](https://angels.you).
