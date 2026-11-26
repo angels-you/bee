@@ -5,5 +5,7 @@ docs/
 examples/
 out/
 *.md
+.env*
+cmd/.env
 .DS_Store
 rules.md

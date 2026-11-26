@@ -12,14 +12,14 @@ Module: `github.com/angels-you/bee`.
 cmd/                     the bee binary (main.go), Dockerfile, .env with every key, build.sh, run.sh, push.sh
 internal/                the worker; not importable from outside
   config/                BEE_* environment: defaults, validation, opening the storage
-  engine/                job slots, timeouts, downloads, uploads, ledger, metrics; one pipeline per type
+  engine/                job slots, timeouts, downloads, uploads, metrics; one pipeline per type
     audio/               ffmpeg tools for audio: probe, loudness, encode, waveform, fingerprint
     video/               ffmpeg tools for video: plan, filters, encode, HLS playlists, thumbnails, verify
     images/              vips tools for images: probe, render, colors
   servers/               the transports, each calls engine.Do
     http/                POST /v1/<kind>
     grpc/                the Bee service of pkg/proto
-    nats/                JetStream consumer, results stream, ledger
+    nats/                JetStream consumer, results stream
     health/              /health, /ready, /metrics
   encrypt/               AES-128 HLS segment encryption and EXT-X-KEY playlists
   testmedia/             test sources and the test bench (in-memory storage, nats-server)
@@ -159,9 +159,17 @@ gRPC status mappings (see [errors.md](errors.md)).
 
 ## Docker image
 
-The image is built from the repository root with `cmd/Dockerfile`: a static
-Go binary (`CGO_ENABLED=0`) on `debian:trixie-slim` with ffmpeg, fpcalc
-and vips with HEIF, running as a non-root user.
+The image is built from the repository root with `cmd/Dockerfile` (about
+140 MB): a static Go binary (`CGO_ENABLED=0`, `-trimpath`, `-s -w`) on
+`scratch`. An `alpine` stage installs ffmpeg, fpcalc (chromaprint) and vips
+with HEIF; the final image gets only these five binaries, the libraries
+`ldd` names for them, the vips and libheif modules (loaded with dlopen, so
+`ldd` of the binaries misses them) with their libraries, the CA
+certificates and a `/etc/passwd` with the user `bee` (uid 10001). There is
+no shell: debug in the `tools` stage (`docker build --target tools`). To add
+a tool or a library, add the apk package and, if it is loaded with dlopen,
+its path to the gathering step. Base images are pinned
+(`golang:1.26.3-alpine3.23`, `alpine:3.23.8`).
 
 ```sh
 cmd/build.sh [version]   # build angelsyou/bee:<version> and :latest for this platform; version defaults to the short git commit
