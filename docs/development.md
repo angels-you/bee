@@ -60,18 +60,6 @@ error codes, clients. A client never needs `internal/`.
 
 ## Build and check
 
-The owner's checkout contains a `source/` folder with old code. It is
-ignored by git and is not part of the build, but `./...` would include it.
-Use the package list without it:
-
-```sh
-go build $(go list -e ./... | grep -v /source)
-go vet   $(go list -e ./... | grep -v /source)
-go test  $(go list -e ./... | grep -v /source)
-```
-
-In a clean clone from GitHub there is no `source/`, so `./...` works:
-
 ```sh
 go build ./...
 go vet ./...
@@ -185,7 +173,7 @@ docker build -f cmd/Dockerfile --build-arg VERSION=dev -t angelsyou/bee:dev .
 `cmd/push.sh <version>` builds `linux/amd64` and `linux/arm64` and pushes to
 Docker Hub. It is for the maintainer only.
 
-`.dockerignore` keeps `docs/`, `source/`, `*.md` and other non-build files
+`.dockerignore` keeps `docs/`, `*.md` and other non-build files
 out of the build context.
 
 ## Code style
